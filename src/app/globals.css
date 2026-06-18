@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Gotu&family=Inter:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --btk-blue: #1565C0;
+  --btk-light: #1976D2;
+  --btk-dark: #0D47A1;
+  --btk-bg: #E3F2FD;
+  --btk-accent: #0288D1;
+}
+
+* { box-sizing: border-box; }
+body { font-family: 'Inter', sans-serif; background: #F5F7FA; }
+
+.font-gotu { font-family: Gotu, Inter, Arial, sans-serif; }
+
+.ticker-track {
+  animation: ticker-scroll var(--ticker-duration, 42s) linear infinite;
+  will-change: transform;
+}
+
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    animation-duration: 90s;
+  }
+}
+
+.btk-card { @apply bg-white rounded-2xl shadow-sm border border-blue-50; }
+.btk-btn { @apply bg-btk-blue text-white font-medium rounded-xl px-6 py-3 hover:bg-btk-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed; }
+.btk-btn-outline { @apply border-2 border-btk-blue text-btk-blue font-medium rounded-xl px-6 py-3 hover:bg-btk-bg transition-colors; }
+.btk-input { @apply w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-btk-blue focus:ring-2 focus:ring-blue-100; }
+
+@media print {
+  body * { visibility: hidden; }
+  #ticket-print, #ticket-print * { visibility: visible; }
+  #ticket-print { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+}

@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agency {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  name        String
+  city        String
+  pin         String
+  isActive    Boolean   @default(true)
+  guichets    Guichet[]
+  tickets     Ticket[]
+  createdAt   DateTime  @default(now())
+  @@map("agencies")
+}
+
+model Guichet {
+  id        Int       @id @default(autoincrement())
+  number    Int
+  label     String
+  agencyId  Int
+  agency    Agency    @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  tickets   Ticket[]
+  isActive  Boolean   @default(true)
+  @@unique([agencyId, number])
+  @@map("guichets")
+}
+
+model Ticket {
+  id          Int          @id @default(autoincrement())
+  number      Int
+  label       String
+  service     String
+  status      TicketStatus @default(WAITING)
+  qrCode      String?
+  agencyId    Int
+  agency      Agency       @relation(fields: [agencyId], references: [id])
+  guichetId   Int?
+  guichet     Guichet?     @relation(fields: [guichetId], references: [id])
+  dayDate     String
+  createdAt   DateTime     @default(now())
+  calledAt    DateTime?
+  servedAt    DateTime?
+  @@map("tickets")
+}
+
+model DailyCounter {
+  id        Int    @id @default(autoincrement())
+  agencyId  Int
+  dayDate   String
+  counter   Int    @default(0)
+  @@unique([agencyId, dayDate])
+  @@map("daily_counters")
+}
+
+model Holiday {
+  id        Int      @id @default(autoincrement())
+  date      String   @unique
+  label     String?
+  createdAt DateTime @default(now())
+  @@map("holidays")
+}
+
+enum TicketStatus {
+  WAITING
+  CALLED
+  SERVED
+  ABSENT
+}
