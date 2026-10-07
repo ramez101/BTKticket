@@ -2,11 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { SERVICES } from '@/types'
+import { formatInternationalPhone } from '@/lib/phone-countries'
+import { PhoneCountrySelect } from '@/components/shared/PhoneCountrySelect'
+
+type KioskMode = 'guest' | 'phone'
 
 export default function BornePage() {
   const [agencies, setAgencies] = useState<any[]>([])
   const [selectedAgency, setSelectedAgency] = useState<any>(null)
   const [selectedService, setSelectedService] = useState('')
+  const [kioskMode, setKioskMode] = useState<KioskMode | null>(null)
+  const [serviceScreenOpen, setServiceScreenOpen] = useState(false)
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [phoneCountryCode, setPhoneCountryCode] = useState('TN')
   const [ticket, setTicket] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [isOpen, setIsOpen] = useState(true)
@@ -31,7 +39,7 @@ export default function BornePage() {
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const status = await fetch('/api/service-status', { cache: 'no-store' }).then(r => r.json())
+        const status = await fetch('/api/service-status').then(r => r.json())
         setIsOpen(Boolean(status.open))
       } catch {
         setIsOpen(false)
@@ -44,6 +52,12 @@ export default function BornePage() {
   }, [])
 
   useEffect(() => {
+    if (!selectedAgency || ticket || !serviceScreenOpen) return
+    const t = setTimeout(() => resetToWelcome(), 20000)
+    return () => clearTimeout(t)
+  }, [selectedAgency, ticket, serviceScreenOpen, selectedService, customerPhone, phoneCountryCode])
+
+  useEffect(() => {
     if (!ticket) return
     const t = setTimeout(() => closeTicket(), 20000)
     return () => clearTimeout(t)
@@ -51,13 +65,19 @@ export default function BornePage() {
 
   async function generateTicket() {
     if (!selectedAgency || !selectedService) return
+    if (kioskMode === 'phone' && !customerPhone.trim()) return
     setLoading(true)
 
     try {
       const res = await fetch('/api/ticket', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agencyId: selectedAgency.id, service: selectedService }),
+        body: JSON.stringify({
+          agencyId: selectedAgency.id,
+          service: selectedService,
+          notificationMode: kioskMode,
+          customerPhone: kioskMode === 'phone' ? formatInternationalPhone(phoneCountryCode, customerPhone) : undefined,
+        }),
       })
 
       if (!res.ok) {
@@ -74,12 +94,20 @@ export default function BornePage() {
 
   function closeTicket() {
     setTicket(null)
+    resetToWelcome()
+  }
+
+  function resetToWelcome() {
     setSelectedService('')
+    setKioskMode(null)
+    setServiceScreenOpen(false)
+    setCustomerPhone('')
+    setPhoneCountryCode('TN')
   }
 
   function resetToAgencies() {
     setTicket(null)
-    setSelectedService('')
+    resetToWelcome()
     setSelectedAgency(null)
   }
 
@@ -121,6 +149,107 @@ export default function BornePage() {
                 </div>
               </button>
             ))}
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  if (!serviceScreenOpen) {
+    return (
+      <main className="flex min-h-[100dvh] flex-col bg-gradient-to-br from-white via-[#edf7ff] to-[#d8ebff]">
+        <KioskHeader clock={clock} dateStr={dateStr} agencyName={selectedAgency.name} />
+
+        <section className="mx-auto flex w-full max-w-6xl flex-1 items-center px-5 py-8 sm:px-6">
+          <div className="grid w-full overflow-hidden rounded-[36px] border border-[#dbeaf8] bg-white shadow-[0_40px_100px_-50px_rgba(0,101,161,0.32)] lg:grid-cols-[1fr_1fr]">
+            <div className="relative overflow-hidden bg-gradient-to-br from-[#003a66] via-[#0065a1] to-[#1780c9] p-7 text-white sm:p-10">
+              <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
+              <div className="absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-[#d8ebff]/20 blur-2xl" />
+              <div className="relative flex h-full flex-col justify-between gap-12">
+                <div>
+                  <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white p-3 shadow-lg">
+                    <img src="/BTK.png" alt="BTK" className="h-full w-auto" />
+                  </span>
+                  <p className="mt-8 text-l font-black uppercase tracking-[0.34em] text-blue-100">Bienvenue</p>
+                  <h1 className="mt-3 max-w-md text-5xl font-black leading-tight sm:text-5xl">BTK Easy</h1>
+                  <p className="mt-5 max-w-md text-base leading-7 text-blue-100 sm:text-lg">Sélectionnez le mode de connexion souhaité, puis le service correspondant.</p>
+                </div>
+                <div className="rounded-2xl border border-white/20 bg-white/10 p-5 backdrop-blur-sm">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-100">Agence</p>
+                  <p className="mt-2 text-2xl font-black">{selectedAgency.name}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 sm:p-10">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0065a1]">Bonjour!</p>
+              <h2 className="mt-3 text-3xl font-black text-[#003a66]">Comment souhaitez-vous prendre votre ticket ?</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-500">Choisissez une option pour poursuivre vers le choix du service.</p>
+
+              {!isOpen && <ClosedNotice />}
+
+              <div className="mt-7 grid gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setKioskMode('guest')
+                    setServiceScreenOpen(true)
+                  }}
+                  disabled={!isOpen}
+                  className="group flex items-center gap-5 rounded-2xl border border-[#dbeaf8] bg-[#f4fbff] p-5 text-left transition hover:-translate-y-0.5 hover:border-[#0065a1] hover:bg-white hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-xl font-black text-[#0065a1] shadow-sm">1</span>
+                  <span>
+                    <span className="block text-lg font-black text-[#003a66]">Mode invité</span>
+                    <span className="mt-1 block text-sm font-semibold text-slate-500">Prendre un ticket rapidement, sans notification.</span>
+                  </span>
+                  <span className="ml-auto text-2xl font-black text-[#0065a1] transition group-hover:translate-x-1">›</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setKioskMode('phone')}
+                  disabled={!isOpen}
+                  className="group flex items-center gap-5 rounded-2xl border border-[#dbeaf8] bg-[#f4fbff] p-5 text-left transition hover:-translate-y-0.5 hover:border-[#0065a1] hover:bg-white hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-xl font-black text-[#0065a1] shadow-sm">2</span>
+                  <span>
+                    <span className="block text-lg font-black text-[#003a66]">Recevoir un message SMS</span>
+                    <span className="mt-1 block text-sm font-semibold text-slate-500">Saisissez votre numéro pour recevoir l'estimation d'attente.</span>
+                  </span>
+                  <span className="ml-auto text-2xl font-black text-[#0065a1] transition group-hover:translate-x-1">›</span>
+                </button>
+              </div>
+
+              {kioskMode === 'phone' && (
+                <div className="mt-5 rounded-2xl border border-[#dbeaf8] bg-[#f4fbff] p-5">
+                  <label className="block text-sm font-black text-[#003a66]">
+                    Numéro de téléphone
+                    <div className="mt-2 flex rounded-xl border border-[#dbeaf8] bg-white focus-within:border-[#0065a1] focus-within:ring-2 focus-within:ring-[#e4f2ff]">
+                      <PhoneCountrySelect value={phoneCountryCode} onChange={setPhoneCountryCode} className="w-[185px] shrink-0 border-r border-[#dbeaf8]" />
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        className="min-w-0 flex-1 bg-white px-3 py-3 text-sm font-semibold text-[#003a66] outline-none"
+                        placeholder="Numéro de téléphone"
+                        value={customerPhone}
+                        onChange={event => setCustomerPhone(event.target.value)}
+                      />
+                    </div>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setServiceScreenOpen(true)}
+                    disabled={!customerPhone.trim()}
+                    className="mt-4 w-full rounded-xl bg-[#0065a1] px-5 py-3 text-sm font-black text-white transition hover:bg-[#003a66] disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    Continuer vers les services
+                  </button>
+                </div>
+              )}
+
+              
+            </div>
           </div>
         </section>
       </main>
@@ -231,7 +360,7 @@ function TicketCard({ ticket, clock }: { ticket: any; clock: string }) {
               <img src="/BTK.png" alt="BTK" className="h-7 w-auto" />
             </div>
             <div>
-              <div className="text-sm font-bold leading-tight">BTK RDV</div>
+              <div className="text-sm font-bold leading-tight">BTK Easy</div>
               <div className="text-xs text-blue-100">{ticket.agencyName}</div>
             </div>
           </div>
@@ -280,7 +409,7 @@ function KioskHeader({ clock, dateStr, agencyName }: { clock: string; dateStr: s
         <div className="flex min-w-0 items-center gap-4">
           <img src="/BTK.png" alt="BTK" className="h-12 w-auto shrink-0" />
           <div className="min-w-0">
-            <div className="text-lg font-bold leading-tight text-gray-900">BTK RDV</div>
+            <div className="text-lg font-bold leading-tight text-gray-900">BTK Easy</div>
             <div className="truncate text-xs font-medium text-gray-500">{agencyName || 'Borne de tickets'}</div>
           </div>
         </div>

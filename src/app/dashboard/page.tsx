@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
+import { useRouter } from 'next/navigation'
 
 const ADMIN_PIN = 'btk2024'
 
-type DashboardTab = 'agencies' | 'holidays' | 'stats'
+type DashboardTab = 'agencies' | 'charges' | 'holidays' | 'service' | 'single-session' | 'ramadan' | 'stats'
+type WorkScheduleMode = 'service' | 'single-session' | 'ramadan'
 
 interface Guichet {
   id: number
@@ -20,6 +22,9 @@ interface AgencyTodayStats {
   served: number
   absent: number
   total: number
+  estimatedWait?: number
+  averagePassageMinutes?: number
+  passageSampleSize?: number
 }
 
 interface Agency {
@@ -34,11 +39,90 @@ interface Agency {
   _count?: { tickets?: number }
 }
 
+interface Charge {
+  id: number
+  code: string
+  name: string
+  agencyId: number
+  agencyCode: string
+  agencyName: string
+  city: string
+  email?: string | null
+  phone?: string | null
+  isActive: boolean
+  agencyActive: boolean
+  appointmentCount?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+interface ChargeAvailability {
+  id?: number
+  chargeId?: number
+  weekday: number
+  enabled: boolean
+  startTime: string
+  endTime: string
+  slotMinutes: number
+}
+
 interface Holiday {
   id: number
   date: string
   label: string | null
   createdAt: string
+}
+
+interface WorkSchedule {
+  key: string
+  activeMode: WorkScheduleMode
+  singleSessionStart: string
+  singleSessionEnd: string
+  singleSessionStartMonth: string | null
+  singleSessionEndMonth: string | null
+  ramadanEnabled: boolean
+  ramadanMonth: string | null
+  ramadanStartDate: string | null
+  ramadanEndDate: string | null
+  ramadanStartTime: string
+  ramadanEndTime: string
+  updatedAt?: string
+}
+
+const SERVICE_START_TIME = '08:00'
+const SERVICE_END_TIME = '16:30'
+
+const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
+  key: 'default',
+  activeMode: 'service',
+  singleSessionStart: SERVICE_START_TIME,
+  singleSessionEnd: SERVICE_END_TIME,
+  singleSessionStartMonth: null,
+  singleSessionEndMonth: null,
+  ramadanEnabled: false,
+  ramadanMonth: null,
+  ramadanStartDate: null,
+  ramadanEndDate: null,
+  ramadanStartTime: SERVICE_START_TIME,
+  ramadanEndTime: '14:00',
+}
+
+const WEEKDAY_LABELS = [
+  { weekday: 1, label: 'Lundi' },
+  { weekday: 2, label: 'Mardi' },
+  { weekday: 3, label: 'Mercredi' },
+  { weekday: 4, label: 'Jeudi' },
+  { weekday: 5, label: 'Vendredi' },
+]
+
+function defaultChargeAvailability(): ChargeAvailability[] {
+  return WEEKDAY_LABELS.map(({ weekday }) => ({
+    weekday,
+    enabled: weekday >= 1 && weekday <= 5,
+    startTime: '08:30',
+    endTime: '16:00',
+    slotMinutes: 30,
+  }))
 }
 
 function todayInputDate() {
@@ -64,6 +148,8 @@ function getAgencyStats(agency: Agency) {
   const served = agency.todayStats?.served ?? 0
   const absent = agency.todayStats?.absent ?? 0
   const total = agency.todayStats?.total ?? waiting + called + served + absent
+  const averagePassageMinutes = agency.todayStats?.averagePassageMinutes ?? 4
+  const passageSampleSize = agency.todayStats?.passageSampleSize ?? 0
 
   return {
     waiting,
@@ -71,7 +157,9 @@ function getAgencyStats(agency: Agency) {
     served,
     absent,
     total,
-    estimatedWait: waiting * 4,
+    estimatedWait: agency.todayStats?.estimatedWait ?? waiting * averagePassageMinutes,
+    averagePassageMinutes,
+    passageSampleSize,
   }
 }
 
@@ -147,6 +235,39 @@ function percent(part: number, total: number) {
   return Math.round((part / total) * 100)
 }
 
+function timeToMinutes(value: string) {
+  const [hours, minutes] = value.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+function isTimeRangeValid(start: string, end: string) {
+  return Boolean(start && end) && timeToMinutes(start) < timeToMinutes(end)
+}
+
+function displayTimeRange(start: string, end: string) {
+  return `${start} - ${end}`
+}
+
+function normalizeWorkScheduleMode(value: unknown): WorkScheduleMode {
+  if (value === 'service' || value === 'single-session' || value === 'ramadan') return value
+  return 'service'
+}
+
+function isValidMonthInput(value: string | null) {
+  return Boolean(value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value))
+}
+
+function displayMonth(value: string | null) {
+  if (!value) return 'Mois non defini'
+  const [year, month] = value.split('-')
+  return `${month}/${year}`
+}
+
+function displayMonthRange(start: string | null, end: string | null) {
+  if (!start || !end) return 'Mois non definis'
+  return `${displayMonth(start)} - ${displayMonth(end)}`
+}
+
 function getAgencyHealth(agency: Agency) {
   const stats = getAgencyStats(agency)
   const guichets = agency.guichets ?? []
@@ -199,11 +320,14 @@ function getAgencyHealth(agency: Agency) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [authed, setAuthed] = useState(false)
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState('')
   const [agencies, setAgencies] = useState<Agency[]>([])
+  const [charges, setCharges] = useState<Charge[]>([])
   const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [workSchedule, setWorkSchedule] = useState<WorkSchedule>(DEFAULT_WORK_SCHEDULE)
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<DashboardTab>('agencies')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -215,32 +339,75 @@ export default function DashboardPage() {
   const [showAddGuichet, setShowAddGuichet] = useState<number | null>(null)
   const [editAgency, setEditAgency] = useState<any>(null)
   const [editGuichet, setEditGuichet] = useState<any>(null)
+  const [showAddCharge, setShowAddCharge] = useState(false)
+  const [editCharge, setEditCharge] = useState<any>(null)
+  const [calendarCharge, setCalendarCharge] = useState<Charge | null>(null)
+  const [chargeAvailability, setChargeAvailability] = useState<ChargeAvailability[]>(defaultChargeAvailability())
 
   const [newAgency, setNewAgency] = useState({ name: '', city: '', pin: '' })
   const [newGuichet, setNewGuichet] = useState({ label: '' })
+  const [newCharge, setNewCharge] = useState({ code: '', name: '', agencyId: '', email: '', phone: '' })
   const [holidayLabel, setHolidayLabel] = useState('')
   const [holidayDates, setHolidayDates] = useState<string[]>([todayInputDate()])
 
   useEffect(() => {
     if (authed) {
       fetchAgencies()
+      fetchCharges()
       fetchHolidays()
+      fetchWorkSchedule()
     }
   }, [authed])
 
-  async function fetchAgencies() {
-    setLoading(true)
+  useEffect(() => {
+    if (!authed) return
+
+    const timer = setInterval(() => {
+      fetchAgencies(false)
+      fetchCharges(false)
+    }, 5000)
+
+    return () => clearInterval(timer)
+  }, [authed])
+
+  async function fetchAgencies(showLoading = true) {
+    if (showLoading) setLoading(true)
     try {
       const data = await fetch('/api/admin/agencies').then(r => r.json())
       setAgencies(Array.isArray(data) ? data : [])
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
+    }
+  }
+
+  async function fetchCharges(showLoading = false) {
+    if (showLoading) setLoading(true)
+    try {
+      const data = await fetch('/api/admin/charges', { cache: 'no-store' }).then(r => r.json())
+      setCharges(Array.isArray(data) ? data : [])
+    } finally {
+      if (showLoading) setLoading(false)
     }
   }
 
   async function fetchHolidays() {
     const data = await fetch('/api/admin/holidays', { cache: 'no-store' }).then(r => r.json())
     setHolidays(Array.isArray(data) ? data : [])
+  }
+
+  async function fetchWorkSchedule() {
+    const data = await fetch('/api/admin/hours', { cache: 'no-store' }).then(r => r.json())
+    setWorkSchedule({
+      ...DEFAULT_WORK_SCHEDULE,
+      ...data,
+      activeMode: normalizeWorkScheduleMode(data?.activeMode),
+      singleSessionStartMonth: data?.singleSessionStartMonth ?? null,
+      singleSessionEndMonth: data?.singleSessionEndMonth ?? null,
+      ramadanMonth: data?.ramadanMonth ?? data?.ramadanStartDate?.slice?.(0, 7) ?? null,
+      ramadanEnabled: normalizeWorkScheduleMode(data?.activeMode) === 'ramadan',
+      ramadanStartDate: data?.ramadanStartDate ?? null,
+      ramadanEndDate: data?.ramadanEndDate ?? null,
+    })
   }
 
   function handlePinLogin() {
@@ -264,6 +431,17 @@ export default function DashboardPage() {
     }
   }
 
+  async function runChargeAction(action: () => Promise<void>, success: string) {
+    try {
+      setNotice('')
+      await action()
+      await fetchCharges()
+      setNotice(success)
+    } catch {
+      setNotice('Operation charge impossible. Verifiez les donnees puis reessayez.')
+    }
+  }
+
   async function runHolidayAction(action: () => Promise<void>, success: string) {
     try {
       setNotice('')
@@ -272,6 +450,17 @@ export default function DashboardPage() {
       setNotice(success)
     } catch {
       setNotice('Operation impossible. Verifiez les donnees puis reessayez.')
+    }
+  }
+
+  async function runScheduleAction(action: () => Promise<void>, success: string) {
+    try {
+      setNotice('')
+      await action()
+      await fetchWorkSchedule()
+      setNotice(success)
+    } catch {
+      setNotice('Horaire impossible a enregistrer. Verifiez les donnees puis reessayez.')
     }
   }
 
@@ -309,6 +498,24 @@ export default function DashboardPage() {
     await runHolidayAction(async () => {
       await fetch(`/api/admin/holidays/${id}`, { method: 'DELETE' })
     }, 'Jour ferie supprime.')
+  }
+
+  async function saveWorkSchedule(success: string, override?: Partial<WorkSchedule>) {
+    await runScheduleAction(async () => {
+      const nextSchedule = {
+        ...workSchedule,
+        ...override,
+      }
+      const response = await fetch('/api/admin/hours', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextSchedule),
+      })
+
+      if (!response.ok) {
+        throw new Error('Invalid schedule')
+      }
+    }, success)
   }
 
   async function toggleAgency(id: number, isActive: boolean) {
@@ -406,6 +613,103 @@ export default function DashboardPage() {
     }, 'Guichet modifie.')
   }
 
+  async function createCharge() {
+    if (!newCharge.name.trim() || !newCharge.agencyId || !newCharge.email.trim()) {
+      setNotice('Nom, agence et email du charge sont obligatoires.')
+      return
+    }
+    await runChargeAction(async () => {
+      const response = await fetch('/api/admin/charges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: newCharge.code || undefined,
+          name: newCharge.name,
+          agencyId: Number(newCharge.agencyId),
+          email: newCharge.email,
+          phone: newCharge.phone,
+        }),
+      })
+      if (!response.ok) throw new Error('Charge invalid')
+      setNewCharge({ code: '', name: '', agencyId: '', email: '', phone: '' })
+      setShowAddCharge(false)
+    }, 'Charge ajoute.')
+  }
+
+  async function updateCharge() {
+    if (!editCharge) return
+    if (!String(editCharge.email ?? '').trim()) {
+      setNotice('Email du charge obligatoire.')
+      return
+    }
+    await runChargeAction(async () => {
+      const response = await fetch(`/api/admin/charges/${editCharge.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: editCharge.code,
+          name: editCharge.name,
+          agencyId: Number(editCharge.agencyId),
+          email: editCharge.email,
+          phone: editCharge.phone,
+          isActive: editCharge.isActive,
+        }),
+      })
+      if (!response.ok) throw new Error('Charge invalid')
+      setEditCharge(null)
+    }, 'Charge modifie.')
+  }
+
+  async function toggleCharge(charge: Charge) {
+    await runChargeAction(async () => {
+      const response = await fetch(`/api/admin/charges/${charge.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !charge.isActive }),
+      })
+      if (!response.ok) throw new Error('Charge invalid')
+    }, charge.isActive ? 'Charge desactive.' : 'Charge active.')
+  }
+
+  async function deleteCharge(charge: Charge) {
+    if (!confirm(`Supprimer le charge "${charge.name}" avec ses rendez-vous ?`)) return
+    await runChargeAction(async () => {
+      const response = await fetch(`/api/admin/charges/${charge.id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error('Charge invalid')
+      if (calendarCharge?.id === charge.id) setCalendarCharge(null)
+    }, 'Charge supprime.')
+  }
+
+  async function openChargeCalendar(charge: Charge) {
+    setCalendarCharge(charge)
+    setChargeAvailability(defaultChargeAvailability())
+    try {
+      const data = await fetch(`/api/admin/charges/${charge.id}/availability`, { cache: 'no-store' }).then(r => r.json())
+      setChargeAvailability(Array.isArray(data.availability) ? data.availability : defaultChargeAvailability())
+    } catch {
+      setNotice('Calendrier charge indisponible.')
+    }
+  }
+
+  function updateChargeAvailability(weekday: number, patch: Partial<ChargeAvailability>) {
+    setChargeAvailability(prev => prev.map(item => (
+      item.weekday === weekday ? { ...item, ...patch } : item
+    )))
+  }
+
+  async function saveChargeCalendar() {
+    if (!calendarCharge) return
+    await runChargeAction(async () => {
+      const response = await fetch(`/api/admin/charges/${calendarCharge.id}/availability`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ availability: chargeAvailability }),
+      })
+      if (!response.ok) throw new Error('Invalid calendar')
+      setCalendarCharge(null)
+    }, 'Calendrier charge enregistre.')
+  }
+
   const stats = useMemo(() => {
     const totalGuichets = agencies.reduce((sum, agency) => sum + (agency.guichets?.length ?? 0), 0)
     const openGuichets = agencies.reduce(
@@ -413,20 +717,23 @@ export default function DashboardPage() {
       0,
     )
     const totalWaiting = agencies.reduce((sum, agency) => sum + getAgencyStats(agency).waiting, 0)
+    const estimatedWait = agencies.reduce((sum, agency) => sum + getAgencyStats(agency).estimatedWait, 0)
     const busiest = [...agencies].sort((a, b) => getAgencyStats(b).waiting - getAgencyStats(a).waiting)[0]
 
     return {
       totalAgencies: agencies.length,
       activeAgencies: agencies.filter(a => a.isActive).length,
       inactiveAgencies: agencies.filter(a => !a.isActive).length,
+      totalCharges: charges.length,
+      activeCharges: charges.filter(charge => charge.isActive).length,
       totalGuichets,
       openGuichets,
       closedGuichets: totalGuichets - openGuichets,
       totalWaiting,
-      estimatedWait: totalWaiting * 4,
+      estimatedWait,
       busiest,
     }
-  }, [agencies])
+  }, [agencies, charges])
 
   const filteredAgencies = useMemo(() => {
     const value = search.trim().toLowerCase()
@@ -435,6 +742,14 @@ export default function DashboardPage() {
       `${agency.code} ${agency.name} ${agency.city}`.toLowerCase().includes(value),
     )
   }, [agencies, search])
+
+  const filteredCharges = useMemo(() => {
+    const value = search.trim().toLowerCase()
+    if (!value) return charges
+    return charges.filter(charge =>
+      `${charge.code} ${charge.name} ${charge.agencyCode} ${charge.agencyName} ${charge.city}`.toLowerCase().includes(value),
+    )
+  }, [charges, search])
 
   const selectedAgency = useMemo(() => {
     if (!selectedAgencyId) return null
@@ -447,15 +762,31 @@ export default function DashboardPage() {
     ? 'Caracteristiques'
     : tab === 'agencies'
     ? 'Agences et guichets'
+    : tab === 'charges'
+      ? 'Config charge'
     : tab === 'holidays'
       ? 'Jours feries'
+      : tab === 'service'
+        ? 'SERVICE'
+      : tab === 'single-session'
+        ? 'Seance unique'
+        : tab === 'ramadan'
+          ? 'Ramadan'
       : 'Statistiques'
   const tabDescription = isAgencyDetailsOpen && selectedAgency
     ? `${selectedAgency.name} - ${selectedAgency.code} - ${selectedAgency.city}`
     : tab === 'agencies'
     ? 'Gestion des agences, guichets et disponibilites.'
+    : tab === 'charges'
+      ? 'Gestion des charges, affectation agence et calendriers RDV.'
     : tab === 'holidays'
       ? 'Dates de fermeture exceptionnelle du service.'
+      : tab === 'service'
+        ? 'Horaire par defaut du service: 08:00 - 16:30.'
+      : tab === 'single-session'
+        ? 'Horaire special applique pendant les mois choisis.'
+        : tab === 'ramadan'
+          ? 'Mois Ramadan et horaire applique pendant ce mois.'
       : 'Vue globale de la charge et des files.'
 
   if (!authed) {
@@ -510,7 +841,9 @@ export default function DashboardPage() {
               type="button"
               onClick={() => {
                 fetchAgencies()
+                fetchCharges()
                 fetchHolidays()
+                fetchWorkSchedule()
               }}
               className="rounded-lg border border-blue-100 bg-white px-4 py-2 text-sm font-bold text-btk-blue transition hover:bg-blue-50"
             >
@@ -535,8 +868,8 @@ export default function DashboardPage() {
             onClick={() => setMenuOpen(false)}
             aria-label="Fermer le menu"
           />
-          <aside className="fixed left-0 top-0 z-50 flex h-screen w-[310px] max-w-[86vw] flex-col bg-white shadow-2xl ring-1 ring-blue-100">
-            <div className="flex items-center justify-between gap-4 border-b border-blue-100 p-5">
+          <aside className="fixed inset-y-0 left-0 z-50 flex h-dvh w-[310px] max-w-[86vw] flex-col bg-white shadow-2xl ring-1 ring-blue-100">
+            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-blue-100 p-5">
               <div>
                 <p className="text-xs font-black uppercase text-btk-blue">Menu dashboard</p>
                 <h2 className="mt-1 text-xl font-black text-gray-950">Options</h2>
@@ -551,7 +884,8 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            <nav className="grid gap-2 p-4">
+            <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              <div className="grid gap-2">
               <DashboardMenuButton
                 active={tab === 'agencies'}
                 code="AG"
@@ -559,6 +893,17 @@ export default function DashboardPage() {
                 detail="Agences et guichets"
                 onClick={() => {
                   setTab('agencies')
+                  setSelectedAgencyId(null)
+                  setMenuOpen(false)
+                }}
+              />
+              <DashboardMenuButton
+                active={tab === 'charges'}
+                code="CH"
+                label="Config charge"
+                detail={`${charges.length} charge(s)`}
+                onClick={() => {
+                  setTab('charges')
                   setSelectedAgencyId(null)
                   setMenuOpen(false)
                 }}
@@ -574,6 +919,39 @@ export default function DashboardPage() {
                 }}
               />
               <DashboardMenuButton
+                active={tab === 'service'}
+                code="SV"
+                label="SERVICE"
+                detail={workSchedule.activeMode === 'service' ? `Actif - ${displayTimeRange(SERVICE_START_TIME, SERVICE_END_TIME)}` : displayTimeRange(SERVICE_START_TIME, SERVICE_END_TIME)}
+                onClick={() => {
+                  setTab('service')
+                  setSelectedAgencyId(null)
+                  setMenuOpen(false)
+                }}
+              />
+              <DashboardMenuButton
+                active={tab === 'single-session'}
+                code="SU"
+                label="Seance unique"
+                detail={workSchedule.activeMode === 'single-session' ? displayMonthRange(workSchedule.singleSessionStartMonth, workSchedule.singleSessionEndMonth) : 'Non active'}
+                onClick={() => {
+                  setTab('single-session')
+                  setSelectedAgencyId(null)
+                  setMenuOpen(false)
+                }}
+              />
+              <DashboardMenuButton
+                active={tab === 'ramadan'}
+                code="RA"
+                label="Ramadan"
+                detail={workSchedule.activeMode === 'ramadan' ? displayMonth(workSchedule.ramadanMonth) : 'Non actif'}
+                onClick={() => {
+                  setTab('ramadan')
+                  setSelectedAgencyId(null)
+                  setMenuOpen(false)
+                }}
+              />
+              <DashboardMenuButton
                 active={tab === 'stats'}
                 code="ST"
                 label="Statistiques"
@@ -583,14 +961,27 @@ export default function DashboardPage() {
                   setMenuOpen(false)
                 }}
               />
+              <DashboardMenuButton
+                active={false}
+                code="DC"
+                label="Dashboard chargé"
+                detail="Connexion chargé"
+                onClick={() => {
+                  router.push('/charge-dashboard')
+                  setMenuOpen(false)
+                }}
+              />
+              </div>
             </nav>
 
-            <div className="mt-auto border-t border-blue-100 p-4">
+            <div className="shrink-0 border-t border-blue-100 p-4">
               <button
                 type="button"
                 onClick={() => {
                   fetchAgencies()
+                  fetchCharges()
                   fetchHolidays()
+                  fetchWorkSchedule()
                   setMenuOpen(false)
                 }}
                 className="w-full rounded-lg border border-blue-100 bg-white px-4 py-3 text-sm font-black text-btk-blue transition hover:bg-blue-50"
@@ -600,12 +991,16 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setShowAddAgency(true)
+                  if (tab === 'charges') {
+                    setShowAddCharge(true)
+                  } else {
+                    setShowAddAgency(true)
+                  }
                   setMenuOpen(false)
                 }}
                 className="mt-2 w-full rounded-lg bg-btk-blue px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-btk-dark"
               >
-                Nouvelle agence
+                {tab === 'charges' ? 'Nouveau charge' : 'Nouvelle agence'}
               </button>
             </div>
           </aside>
@@ -614,9 +1009,10 @@ export default function DashboardPage() {
 
       <section className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6">
         <div className="min-w-0">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
               <StatCard label="Agences" value={stats.totalAgencies} detail={`${stats.activeAgencies} actives`} tone="blue" />
               <StatCard label="Inactives" value={stats.inactiveAgencies} detail="agences fermees" tone="gray" />
+              <StatCard label="Charges" value={stats.totalCharges} detail={`${stats.activeCharges} actifs`} tone="indigo" />
               <StatCard label="Guichets" value={stats.totalGuichets} detail="total" tone="indigo" />
               <StatCard label="Ouverts" value={stats.openGuichets} detail={`${stats.closedGuichets} fermes`} tone="green" />
               <StatCard label="En attente" value={stats.totalWaiting} detail="tickets live" tone="orange" />
@@ -631,10 +1027,10 @@ export default function DashboardPage() {
                   <p className="mt-1 text-sm font-medium text-gray-500">{tabDescription}</p>
                 </div>
 
-                {tab !== 'holidays' && !isAgencyDetailsOpen && (
+                {(tab === 'agencies' || tab === 'charges' || tab === 'stats') && !isAgencyDetailsOpen && (
                   <input
                     className="btk-input h-11 min-w-[240px] bg-white"
-                    placeholder="Recherche agence, ville, code"
+                    placeholder={tab === 'charges' ? 'Recherche charge, agence, code' : 'Recherche agence, ville, code'}
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                   />
@@ -676,14 +1072,21 @@ export default function DashboardPage() {
                       key={agency.id}
                       agency={agency}
                       onSelect={() => setSelectedAgencyId(agency.id)}
-                      onEditAgency={() => setEditAgency({ ...agency, newPin: '' })}
                       onToggleAgency={() => toggleAgency(agency.id, agency.isActive)}
-                      onDeleteAgency={() => deleteAgency(agency.id, agency.name)}
-                      onAddGuichet={() => openAddGuichet(agency)}
                     />
                   ))}
                 </div>
               )
+            ) : tab === 'charges' ? (
+              <ChargesView
+                charges={filteredCharges}
+                agencies={agencies}
+                onAdd={() => setShowAddCharge(true)}
+                onEdit={charge => setEditCharge({ ...charge })}
+                onCalendar={openChargeCalendar}
+                onToggle={toggleCharge}
+                onDelete={deleteCharge}
+              />
             ) : tab === 'holidays' ? (
               <HolidaysView
                 holidays={holidays}
@@ -695,6 +1098,23 @@ export default function DashboardPage() {
                 onRemoveHolidayDate={removeHolidayDate}
                 onCreateHolidays={createHolidays}
                 onDeleteHoliday={deleteHoliday}
+              />
+            ) : tab === 'service' ? (
+              <ServiceScheduleView
+                schedule={workSchedule}
+                onSave={() => saveWorkSchedule('SERVICE active.', { activeMode: 'service', ramadanEnabled: false })}
+              />
+            ) : tab === 'single-session' ? (
+              <SingleSessionView
+                schedule={workSchedule}
+                onChange={setWorkSchedule}
+                onSave={() => saveWorkSchedule('Horaire seance unique enregistre.')}
+              />
+            ) : tab === 'ramadan' ? (
+              <RamadanView
+                schedule={workSchedule}
+                onChange={setWorkSchedule}
+                onSave={() => saveWorkSchedule('Horaire Ramadan enregistre.')}
               />
             ) : (
               <StatsView agencies={filteredAgencies} busiest={stats.busiest} />
@@ -735,6 +1155,105 @@ export default function DashboardPage() {
         <Modal title="Modifier guichet" onClose={() => setEditGuichet(null)}>
           <input className="btk-input" value={editGuichet.label} onChange={e => setEditGuichet((p: any) => ({ ...p, label: e.target.value }))} />
           <ModalActions onConfirm={updateGuichet} onCancel={() => setEditGuichet(null)} confirmLabel="Sauvegarder" />
+        </Modal>
+      )}
+
+      {showAddCharge && (
+        <Modal title="Nouveau charge" onClose={() => setShowAddCharge(false)}>
+          <div className="space-y-3">
+            <input className="btk-input" placeholder="Code optionnel, ex: CH0001" value={newCharge.code} onChange={e => setNewCharge(p => ({ ...p, code: e.target.value }))} />
+            <input className="btk-input" placeholder="Nom du charge" value={newCharge.name} onChange={e => setNewCharge(p => ({ ...p, name: e.target.value }))} />
+            <select className="btk-input" value={newCharge.agencyId} onChange={e => setNewCharge(p => ({ ...p, agencyId: e.target.value }))}>
+              <option value="">Choisir agence</option>
+              {agencies.map(agency => (
+                <option key={agency.id} value={agency.id}>{agency.code} - {agency.name}</option>
+              ))}
+            </select>
+            <input type="email" required className="btk-input" placeholder="Email du charge (obligatoire)" value={newCharge.email} onChange={e => setNewCharge(p => ({ ...p, email: e.target.value }))} />
+            <input className="btk-input" placeholder="Telephone optionnel" value={newCharge.phone} onChange={e => setNewCharge(p => ({ ...p, phone: e.target.value }))} />
+          </div>
+          <ModalActions onConfirm={createCharge} onCancel={() => setShowAddCharge(false)} confirmLabel="Ajouter" />
+        </Modal>
+      )}
+
+      {editCharge && (
+        <Modal title="Modifier charge" onClose={() => setEditCharge(null)}>
+          <div className="space-y-3">
+            <input className="btk-input" placeholder="Code" value={editCharge.code} onChange={e => setEditCharge((p: any) => ({ ...p, code: e.target.value }))} />
+            <input className="btk-input" placeholder="Nom du charge" value={editCharge.name} onChange={e => setEditCharge((p: any) => ({ ...p, name: e.target.value }))} />
+            <select className="btk-input" value={editCharge.agencyId} onChange={e => setEditCharge((p: any) => ({ ...p, agencyId: Number(e.target.value) }))}>
+              {agencies.map(agency => (
+                <option key={agency.id} value={agency.id}>{agency.code} - {agency.name}</option>
+              ))}
+            </select>
+            <input type="email" required className="btk-input" placeholder="Email du charge (obligatoire)" value={editCharge.email ?? ''} onChange={e => setEditCharge((p: any) => ({ ...p, email: e.target.value }))} />
+            <input className="btk-input" placeholder="Telephone optionnel" value={editCharge.phone ?? ''} onChange={e => setEditCharge((p: any) => ({ ...p, phone: e.target.value }))} />
+            <label className="flex items-center justify-between gap-4 rounded-lg bg-blue-50 px-4 py-3 ring-1 ring-blue-100">
+              <span>
+                <span className="block text-sm font-black text-gray-900">Charge actif</span>
+                <span className="mt-0.5 block text-xs font-semibold text-gray-500">Visible dans la prise de RDV client</span>
+              </span>
+              <input
+                type="checkbox"
+                className="h-5 w-5 accent-[#1565C0]"
+                checked={editCharge.isActive}
+                onChange={e => setEditCharge((p: any) => ({ ...p, isActive: e.target.checked }))}
+              />
+            </label>
+          </div>
+          <ModalActions onConfirm={updateCharge} onCancel={() => setEditCharge(null)} confirmLabel="Sauvegarder" />
+        </Modal>
+      )}
+
+      {calendarCharge && (
+        <Modal title={`Calendrier - ${calendarCharge.name}`} onClose={() => setCalendarCharge(null)} wide>
+          <div className="space-y-3">
+            {WEEKDAY_LABELS.map(({ weekday, label }) => {
+              const item = chargeAvailability.find(value => value.weekday === weekday) ?? {
+                weekday,
+                enabled: false,
+                startTime: '08:30',
+                endTime: '16:00',
+                slotMinutes: 30,
+              }
+              return (
+                <div key={weekday} className="grid gap-3 rounded-lg border border-blue-50 p-3 sm:grid-cols-[120px_1fr_1fr_96px] sm:items-center">
+                  <label className="flex items-center gap-2 text-sm font-black text-gray-800">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[#1565C0]"
+                      checked={item.enabled}
+                      onChange={e => updateChargeAvailability(weekday, { enabled: e.target.checked })}
+                    />
+                    {label}
+                  </label>
+                  <input
+                    type="time"
+                    className="btk-input"
+                    value={item.startTime}
+                    onChange={e => updateChargeAvailability(weekday, { startTime: e.target.value })}
+                  />
+                  <input
+                    type="time"
+                    className="btk-input"
+                    value={item.endTime}
+                    onChange={e => updateChargeAvailability(weekday, { endTime: e.target.value })}
+                  />
+                  <select
+                    className="btk-input"
+                    value={item.slotMinutes}
+                    onChange={e => updateChargeAvailability(weekday, { slotMinutes: Number(e.target.value) })}
+                  >
+                    <option value={15}>15 min</option>
+                    <option value={30}>30 min</option>
+                    <option value={45}>45 min</option>
+                    <option value={60}>60 min</option>
+                  </select>
+                </div>
+              )
+            })}
+          </div>
+          <ModalActions onConfirm={saveChargeCalendar} onCancel={() => setCalendarCharge(null)} confirmLabel="Enregistrer" />
         </Modal>
       )}
     </main>
@@ -783,23 +1302,16 @@ function DashboardMenuButton({
 function AgencyPanel({
   agency,
   onSelect,
-  onEditAgency,
   onToggleAgency,
-  onDeleteAgency,
-  onAddGuichet,
 }: {
   agency: Agency
   onSelect: () => void
-  onEditAgency: () => void
   onToggleAgency: () => void
-  onDeleteAgency: () => void
-  onAddGuichet: () => void
 }) {
   const guichets = agency.guichets ?? []
   const openGuichets = guichets.filter(g => g.isActive).length
   const stats = getAgencyStats(agency)
   const load = getLoad(stats.waiting)
-  const capacity = getAgencyCapacity(agency)
 
   return (
     <article
@@ -832,17 +1344,15 @@ function AgencyPanel({
               </div>
               <p className="mt-1 text-sm font-medium text-gray-500">{agency.city}</p>
               <p className="mt-2 text-xs font-bold uppercase text-btk-blue">
-                Cliquer pour ouvrir la fiche
+                Cliquez ici
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <ActionButton onClick={onEditAgency}>Modifier</ActionButton>
             <ActionButton onClick={onToggleAgency} tone={agency.isActive ? 'orange' : 'green'}>
               {agency.isActive ? 'Desactiver' : 'Activer'}
             </ActionButton>
-            <ActionButton onClick={onDeleteAgency} tone="red">Supprimer</ActionButton>
           </div>
         </div>
 
@@ -850,16 +1360,6 @@ function AgencyPanel({
           <MiniMetric label="En attente" value={stats.waiting} tone="blue" />
           <MiniMetric label="Guichets" value={`${openGuichets}/${guichets.length}`} tone="green" />
           <MiniMetric label="Attente" value={`~${stats.estimatedWait}m`} tone="orange" />
-        </div>
-
-        <div className="mt-4 rounded-lg bg-gray-50 p-3 ring-1 ring-gray-100">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className={`rounded-full px-2.5 py-1 text-xs font-black ring-1 ${capacity.className}`}>
-              {capacity.label}
-            </span>
-            <span className="text-xs font-bold text-gray-400">{stats.total} ticket(s) aujourd'hui</span>
-          </div>
-          <p className="mt-2 text-sm font-medium text-gray-500">{capacity.detail}</p>
         </div>
       </div>
     </article>
@@ -900,6 +1400,9 @@ function AgencyDetails({
   const waitingPerOpen = openGuichets > 0 ? Math.ceil(stats.waiting / openGuichets) : stats.waiting
   const remainingTickets = stats.waiting + stats.called
   const health = getAgencyHealth(agency)
+  const passageDetail = stats.passageSampleSize > 0
+    ? `${stats.averagePassageMinutes} min / ticket reel`
+    : `${stats.averagePassageMinutes} min / ticket par defaut`
 
   return (
     <section className="mt-5 rounded-lg bg-white shadow-sm ring-1 ring-blue-100">
@@ -973,7 +1476,7 @@ function AgencyDetails({
 
             <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <CharacteristicMetric label="En attente" value={stats.waiting} detail={`${waitingPerOpen} par guichet ouvert`} tone="blue" />
-              <CharacteristicMetric label="Temps estime" value={`~${stats.estimatedWait}m`} detail="base 4 min / ticket" tone="orange" />
+              <CharacteristicMetric label="Temps estime" value={`~${stats.estimatedWait}m`} detail={passageDetail} tone="orange" />
               <CharacteristicMetric label="Reste a traiter" value={remainingTickets} detail="attente + appeles" tone="indigo" />
               <CharacteristicMetric label="Servis" value={stats.served} detail={`${servedPercent}% du jour`} tone="green" />
               <CharacteristicMetric label="Absents" value={stats.absent} detail={`${absentPercent}% du jour`} tone="red" />
@@ -1176,6 +1679,113 @@ function CharacteristicRow({ label, value }: { label: string; value: ReactNode }
   )
 }
 
+function ChargesView({
+  charges,
+  agencies,
+  onAdd,
+  onEdit,
+  onCalendar,
+  onToggle,
+  onDelete,
+}: {
+  charges: Charge[]
+  agencies: Agency[]
+  onAdd: () => void
+  onEdit: (charge: Charge) => void
+  onCalendar: (charge: Charge) => void
+  onToggle: (charge: Charge) => void
+  onDelete: (charge: Charge) => void
+}) {
+  const activeCharges = charges.filter(charge => charge.isActive).length
+  const agenciesWithCharges = new Set(charges.map(charge => charge.agencyId)).size
+
+  return (
+    <div className="mt-5 grid gap-4 lg:grid-cols-[360px_1fr]">
+      <aside className="space-y-4">
+        <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+          <p className="text-sm font-black uppercase text-btk-blue">Config charge</p>
+          <h2 className="mt-1 text-xl font-black text-gray-950">Charges clients</h2>
+          <p className="mt-2 text-sm leading-6 text-gray-500">
+            Ajoutez, modifiez, supprimez ou deplacez un charge vers une autre agence.
+          </p>
+          <button
+            type="button"
+            onClick={onAdd}
+            className="mt-5 w-full rounded-lg bg-btk-blue px-5 py-3 font-black text-white shadow-sm transition hover:bg-btk-dark"
+          >
+            Ajouter charge
+          </button>
+        </section>
+
+        <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+          <h3 className="text-sm font-black uppercase text-gray-500">Synthese</h3>
+          <div className="mt-4 grid gap-2">
+            <MiniMetric label="Charges" value={charges.length} tone="blue" />
+            <MiniMetric label="Actifs" value={activeCharges} tone="green" />
+            <MiniMetric label="Agences" value={`${agenciesWithCharges}/${agencies.length}`} tone="orange" />
+          </div>
+        </section>
+      </aside>
+
+      <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-gray-950">Liste des charges</h2>
+            <p className="mt-1 text-sm text-gray-500">Le nom de l'agence est lie automatiquement par code agence.</p>
+          </div>
+          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-btk-blue ring-1 ring-blue-100">
+            {charges.length}
+          </span>
+        </div>
+
+        {charges.length === 0 ? (
+          <div className="rounded-lg bg-gray-50 p-10 text-center text-sm font-semibold text-gray-400">
+            Aucun charge trouve.
+          </div>
+        ) : (
+          <div className="divide-y divide-blue-50 rounded-lg border border-blue-50">
+            {charges.map(charge => (
+              <div key={charge.id} className="grid gap-3 px-4 py-4 xl:grid-cols-[1fr_auto] xl:items-center">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-btk-blue">{charge.code}</span>
+                    <h3 className="truncate text-lg font-black text-gray-950">{charge.name}</h3>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-black ring-1 ${
+                      charge.isActive ? 'bg-green-50 text-green-700 ring-green-100' : 'bg-gray-50 text-gray-500 ring-gray-100'
+                    }`}>
+                      {charge.isActive ? 'Actif' : 'Inactif'}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-gray-500">
+                    <span>{charge.agencyCode} - {charge.agencyName}</span>
+                    <span className="text-gray-300">|</span>
+                    <span>{charge.city}</span>
+                    <span className="text-gray-300">|</span>
+                    <span>{charge.appointmentCount ?? 0} RDV</span>
+                    <span className="text-gray-300">|</span>
+                    <span className={charge.email ? 'text-gray-500' : 'text-red-600'}>
+                      {charge.email || 'Email Outlook manquant'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <ActionButton onClick={() => onEdit(charge)}>Modifier</ActionButton>
+                  <ActionButton onClick={() => onCalendar(charge)} tone="green">Calendrier</ActionButton>
+                  <ActionButton onClick={() => onToggle(charge)} tone={charge.isActive ? 'orange' : 'green'}>
+                    {charge.isActive ? 'Desactiver' : 'Activer'}
+                  </ActionButton>
+                  <ActionButton onClick={() => onDelete(charge)} tone="red">Supprimer</ActionButton>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
 function HolidaysView({
   holidays,
   holidayDates,
@@ -1294,6 +1904,334 @@ function HolidaysView({
   )
 }
 
+function ServiceScheduleView({
+  schedule,
+  onSave,
+}: {
+  schedule: WorkSchedule
+  onSave: () => void
+}) {
+  const isActive = schedule.activeMode === 'service'
+
+  return (
+    <div className="mt-5 grid gap-4 lg:grid-cols-[420px_1fr]">
+      <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+        <div>
+          <p className="text-sm font-black uppercase text-btk-blue">Horaire par defaut</p>
+          <h2 className="mt-1 text-xl font-black text-gray-950">SERVICE</h2>
+          <p className="mt-2 text-sm leading-6 text-gray-500">
+            SERVICE est l'option normale du lundi au vendredi.
+          </p>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <CharacteristicMetric label="Ouverture" value={SERVICE_START_TIME} detail="heure fixe" tone="green" />
+          <CharacteristicMetric label="Fermeture" value={SERVICE_END_TIME} detail="heure fixe" tone="orange" />
+        </div>
+
+        <div className={`mt-5 rounded-lg px-4 py-3 text-sm font-black ring-1 ${
+          isActive ? 'bg-green-50 text-green-700 ring-green-100' : 'bg-gray-50 text-gray-600 ring-gray-100'
+        }`}>
+          {isActive ? 'SERVICE est actif' : 'SERVICE n est pas actif'}
+        </div>
+
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={isActive}
+          className="mt-5 w-full rounded-lg bg-btk-blue px-5 py-3 font-black text-white shadow-sm transition hover:bg-btk-dark disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Activer SERVICE
+        </button>
+      </section>
+
+      <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-gray-950">Configuration SERVICE</h2>
+            <p className="mt-1 text-sm text-gray-500">Cet horaire s'applique quand aucun mode special n'est actif pour le mois courant.</p>
+          </div>
+          <span className={`rounded-full px-3 py-1 text-xs font-black ring-1 ${
+            isActive ? 'bg-green-50 text-green-700 ring-green-100' : 'bg-blue-50 text-btk-blue ring-blue-100'
+          }`}>
+            {isActive ? 'Actif' : 'Par defaut'}
+          </span>
+        </div>
+
+        <div className="mt-4 divide-y divide-blue-50 rounded-lg border border-blue-50">
+          <CharacteristicRow label="Mode" value="SERVICE" />
+          <CharacteristicRow label="Jours" value="Lundi - Vendredi" />
+          <CharacteristicRow label="Horaire" value={displayTimeRange(SERVICE_START_TIME, SERVICE_END_TIME)} />
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function SingleSessionView({
+  schedule,
+  onChange,
+  onSave,
+}: {
+  schedule: WorkSchedule
+  onChange: Dispatch<SetStateAction<WorkSchedule>>
+  onSave: () => void
+}) {
+  const rangeValid = isTimeRangeValid(schedule.singleSessionStart, schedule.singleSessionEnd)
+  const isActive = schedule.activeMode === 'single-session'
+  const monthsValid = !isActive || Boolean(
+    isValidMonthInput(schedule.singleSessionStartMonth) &&
+    isValidMonthInput(schedule.singleSessionEndMonth) &&
+    schedule.singleSessionStartMonth &&
+    schedule.singleSessionEndMonth &&
+    schedule.singleSessionStartMonth <= schedule.singleSessionEndMonth,
+  )
+  const canSave = rangeValid && monthsValid
+
+  return (
+    <div className="mt-5 grid gap-4 lg:grid-cols-[420px_1fr]">
+      <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+        <div>
+          <p className="text-sm font-black uppercase text-btk-blue">Horaire special</p>
+          <h2 className="mt-1 text-xl font-black text-gray-950">Seance unique</h2>
+          <p className="mt-2 text-sm leading-6 text-gray-500">
+            Horaire applique pendant la periode de mois choisie.
+          </p>
+        </div>
+
+        <label className="mt-5 flex items-center justify-between gap-4 rounded-lg bg-blue-50 px-4 py-3 ring-1 ring-blue-100">
+          <span>
+            <span className="block text-sm font-black text-gray-900">Activer seance unique</span>
+            <span className="mt-0.5 block text-xs font-semibold text-gray-500">
+              {isActive ? 'Seance unique active' : 'SERVICE reste actif'}
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            className="h-5 w-5 accent-[#1565C0]"
+            checked={isActive}
+            onChange={e => onChange(prev => ({
+              ...prev,
+              activeMode: e.target.checked ? 'single-session' : 'service',
+              ramadanEnabled: false,
+            }))}
+          />
+        </label>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-2 block text-xs font-black uppercase text-gray-400">Mois debut</span>
+            <input
+              type="month"
+              className="btk-input"
+              value={schedule.singleSessionStartMonth ?? ''}
+              onChange={e => onChange(prev => ({ ...prev, singleSessionStartMonth: e.target.value || null }))}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-xs font-black uppercase text-gray-400">Mois fin</span>
+            <input
+              type="month"
+              className="btk-input"
+              value={schedule.singleSessionEndMonth ?? ''}
+              onChange={e => onChange(prev => ({ ...prev, singleSessionEndMonth: e.target.value || null }))}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-xs font-black uppercase text-gray-400">Debut</span>
+            <input
+              type="time"
+              className="btk-input"
+              value={schedule.singleSessionStart}
+              onChange={e => onChange(prev => ({ ...prev, singleSessionStart: e.target.value }))}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-xs font-black uppercase text-gray-400">Fin</span>
+            <input
+              type="time"
+              className="btk-input"
+              value={schedule.singleSessionEnd}
+              onChange={e => onChange(prev => ({ ...prev, singleSessionEnd: e.target.value }))}
+            />
+          </label>
+        </div>
+
+        {!monthsValid && (
+          <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 ring-1 ring-red-100">
+            Choisissez une periode de mois valide.
+          </div>
+        )}
+
+        {!rangeValid && (
+          <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 ring-1 ring-red-100">
+            L'heure de debut doit etre avant l'heure de fin.
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!canSave}
+          className="mt-5 w-full rounded-lg bg-btk-blue px-5 py-3 font-black text-white shadow-sm transition hover:bg-btk-dark disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Enregistrer
+        </button>
+      </section>
+
+      <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-gray-950">Configuration seance unique</h2>
+            <p className="mt-1 text-sm text-gray-500">Les clients peuvent prendre un ticket dans cette plage pendant les mois choisis.</p>
+          </div>
+          <span className={`rounded-full px-3 py-1 text-xs font-black ring-1 ${
+            isActive ? 'bg-green-50 text-green-700 ring-green-100' : 'bg-gray-50 text-gray-600 ring-gray-100'
+          }`}>
+            {isActive ? 'Actif' : 'Inactif'}
+          </span>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <CharacteristicMetric label="Ouverture" value={schedule.singleSessionStart} detail="heure de debut" tone="green" />
+          <CharacteristicMetric label="Fermeture" value={schedule.singleSessionEnd} detail="heure de fin" tone="orange" />
+        </div>
+
+        <div className="mt-4 divide-y divide-blue-50 rounded-lg border border-blue-50">
+          <CharacteristicRow label="Mode" value="Seance unique" />
+          <CharacteristicRow label="Periode" value={displayMonthRange(schedule.singleSessionStartMonth, schedule.singleSessionEndMonth)} />
+          <CharacteristicRow label="Horaire" value={displayTimeRange(schedule.singleSessionStart, schedule.singleSessionEnd)} />
+          <CharacteristicRow label="Remplace" value="SERVICE" />
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function RamadanView({
+  schedule,
+  onChange,
+  onSave,
+}: {
+  schedule: WorkSchedule
+  onChange: Dispatch<SetStateAction<WorkSchedule>>
+  onSave: () => void
+}) {
+  const rangeValid = isTimeRangeValid(schedule.ramadanStartTime, schedule.ramadanEndTime)
+  const isActive = schedule.activeMode === 'ramadan'
+  const monthValid = !isActive || isValidMonthInput(schedule.ramadanMonth)
+  const canSave = rangeValid && monthValid
+
+  return (
+    <div className="mt-5 grid gap-4 lg:grid-cols-[420px_1fr]">
+      <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+        <div>
+          <p className="text-sm font-black uppercase text-btk-blue">Horaire special</p>
+          <h2 className="mt-1 text-xl font-black text-gray-950">Ramadan</h2>
+          <p className="mt-2 text-sm leading-6 text-gray-500">
+            Horaire prioritaire pendant la periode choisie.
+          </p>
+        </div>
+
+        <label className="mt-5 flex items-center justify-between gap-4 rounded-lg bg-blue-50 px-4 py-3 ring-1 ring-blue-100">
+          <span>
+            <span className="block text-sm font-black text-gray-900">Activer Ramadan</span>
+            <span className="mt-0.5 block text-xs font-semibold text-gray-500">
+              {isActive ? 'Horaire Ramadan actif' : 'SERVICE reste actif'}
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            className="h-5 w-5 accent-[#1565C0]"
+            checked={isActive}
+            onChange={e => onChange(prev => ({
+              ...prev,
+              activeMode: e.target.checked ? 'ramadan' : 'service',
+              ramadanEnabled: e.target.checked,
+            }))}
+          />
+        </label>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-2 block text-xs font-black uppercase text-gray-400">Mois</span>
+            <input
+              type="month"
+              className="btk-input"
+              value={schedule.ramadanMonth ?? ''}
+              onChange={e => onChange(prev => ({ ...prev, ramadanMonth: e.target.value || null }))}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-xs font-black uppercase text-gray-400">Debut</span>
+            <input
+              type="time"
+              className="btk-input"
+              value={schedule.ramadanStartTime}
+              onChange={e => onChange(prev => ({ ...prev, ramadanStartTime: e.target.value }))}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-xs font-black uppercase text-gray-400">Fin</span>
+            <input
+              type="time"
+              className="btk-input"
+              value={schedule.ramadanEndTime}
+              onChange={e => onChange(prev => ({ ...prev, ramadanEndTime: e.target.value }))}
+            />
+          </label>
+        </div>
+
+        {!monthValid && (
+          <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 ring-1 ring-red-100">
+            Choisissez le mois Ramadan.
+          </div>
+        )}
+
+        {!rangeValid && (
+          <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 ring-1 ring-red-100">
+            L'heure de debut doit etre avant l'heure de fin.
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!canSave}
+          className="mt-5 w-full rounded-lg bg-btk-blue px-5 py-3 font-black text-white shadow-sm transition hover:bg-btk-dark disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Enregistrer
+        </button>
+      </section>
+
+      <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-gray-950">Configuration Ramadan</h2>
+            <p className="mt-1 text-sm text-gray-500">Pendant ce mois, cet horaire remplace SERVICE.</p>
+          </div>
+          <span className={`rounded-full px-3 py-1 text-xs font-black ring-1 ${
+            isActive ? 'bg-green-50 text-green-700 ring-green-100' : 'bg-gray-50 text-gray-600 ring-gray-100'
+          }`}>
+            {isActive ? 'Actif' : 'Inactif'}
+          </span>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <CharacteristicMetric label="Ouverture" value={schedule.ramadanStartTime} detail="heure Ramadan" tone="green" />
+          <CharacteristicMetric label="Fermeture" value={schedule.ramadanEndTime} detail="heure Ramadan" tone="orange" />
+        </div>
+
+        <div className="mt-4 divide-y divide-blue-50 rounded-lg border border-blue-50">
+          <CharacteristicRow label="Mois" value={displayMonth(schedule.ramadanMonth)} />
+          <CharacteristicRow label="Horaire" value={displayTimeRange(schedule.ramadanStartTime, schedule.ramadanEndTime)} />
+          <CharacteristicRow label="Remplace" value="SERVICE" />
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function StatsView({ agencies, busiest }: { agencies: Agency[]; busiest?: Agency }) {
   const ranked = [...agencies].sort((a, b) => getAgencyStats(b).waiting - getAgencyStats(a).waiting)
   const busiestStats = busiest ? getAgencyStats(busiest) : null
@@ -1313,7 +2251,8 @@ function StatsView({ agencies, busiest }: { agencies: Agency[]; busiest?: Agency
 
         <div className="space-y-3">
           {ranked.map(agency => {
-            const waiting = getAgencyStats(agency).waiting
+            const agencyStats = getAgencyStats(agency)
+            const waiting = agencyStats.waiting
             const load = getLoad(waiting)
             return (
               <div key={agency.id} className="rounded-lg border border-blue-50 p-4">
@@ -1324,7 +2263,7 @@ function StatsView({ agencies, busiest }: { agencies: Agency[]; busiest?: Agency
                   </div>
                   <div className="text-right">
                     <div className="text-lg font-black text-btk-blue tabular-nums">{waiting}</div>
-                    <div className="text-xs text-gray-400">~{waiting * 4} min</div>
+                    <div className="text-xs text-gray-400">~{agencyStats.estimatedWait} min</div>
                   </div>
                 </div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
@@ -1432,10 +2371,10 @@ function ActionButton({ children, onClick, tone = 'blue' }: { children: ReactNod
   )
 }
 
-function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+function Modal({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
-      <section className="w-full max-w-md rounded-lg bg-white p-6 shadow-2xl ring-1 ring-blue-100">
+      <section className={`w-full rounded-lg bg-white p-6 shadow-2xl ring-1 ring-blue-100 ${wide ? 'max-w-4xl' : 'max-w-md'}`}>
         <div className="mb-5 flex items-center justify-between gap-4">
           <h2 className="text-lg font-black text-gray-950">{title}</h2>
           <button

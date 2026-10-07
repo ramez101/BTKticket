@@ -4,7 +4,7 @@ Ce fichier resume la connexion a la base de donnees et la structure des tables u
 
 ## Technologie
 
-- Base de donnees : PostgreSQL
+- Base de donnees : MySQL/MariaDB (XAMPP/phpMyAdmin)
 - ORM : Prisma
 - Schema Prisma : `prisma/schema.prisma`
 - Client Prisma : `src/lib/prisma.ts`
@@ -17,20 +17,20 @@ La connexion est configuree avec la variable d'environnement `DATABASE_URL`.
 Exemple :
 
 ```env
-DATABASE_URL="postgresql://btkuser:btkpass123@localhost:5432/btkticket"
+DATABASE_URL="mysql://root:@127.0.0.1:3306/btkticket"
 NEXT_PUBLIC_BASE_URL="http://localhost:3000"
 ```
 
 Format de `DATABASE_URL` :
 
 ```text
-postgresql://UTILISATEUR:MOT_DE_PASSE@HOTE:PORT/NOM_BASE
+mysql://UTILISATEUR:MOT_DE_PASSE@HOTE:PORT/NOM_BASE
 ```
 
 Exemple local :
 
 ```text
-postgresql://postgres:motdepasse@localhost:5432/btkticket
+mysql://root:motdepasse@127.0.0.1:3306/btkticket
 ```
 
 Important : le vrai fichier `.env` peut contenir un mot de passe reel. Il ne faut pas le publier dans Git.
@@ -43,7 +43,7 @@ Installer les dependances :
 npm install
 ```
 
-Appliquer le schema Prisma dans PostgreSQL :
+Appliquer le schema Prisma dans MySQL/MariaDB :
 
 ```bash
 npm run db:push
@@ -78,9 +78,12 @@ Cette table contient les agences BTK.
 | Colonne | Type | Contraintes | Description |
 |---|---|---|---|
 | `id` | `Int` | Cle primaire, auto-increment | Identifiant interne de l'agence |
-| `code` | `String` | Unique | Code agence, exemple `AG01` |
+| `code` | `String` | Unique | Code agence, exemple `00101` |
 | `name` | `String` | Obligatoire | Nom de l'agence |
 | `city` | `String` | Obligatoire | Ville de l'agence |
+| `address` | `String?` | Optionnel | Adresse de l'agence |
+| `latitude` | `Float?` | Optionnel | Latitude GPS de l'agence |
+| `longitude` | `Float?` | Optionnel | Longitude GPS de l'agence |
 | `pin` | `String` | Obligatoire | PIN chiffre avec bcrypt |
 | `isActive` | `Boolean` | Defaut `true` | Etat actif/inactif de l'agence |
 | `createdAt` | `DateTime` | Defaut `now()` | Date de creation |
@@ -89,6 +92,8 @@ Relations :
 
 - Une agence possede plusieurs guichets.
 - Une agence possede plusieurs tickets.
+- Une agence possede plusieurs charges.
+- Une agence possede plusieurs rendez-vous.
 
 ### 2. `guichets`
 
@@ -134,6 +139,7 @@ Cette table contient les tickets generes par les clients ou la borne.
 | `createdAt` | `DateTime` | Defaut `now()` | Date de creation du ticket |
 | `calledAt` | `DateTime?` | Optionnel | Date d'appel du ticket |
 | `servedAt` | `DateTime?` | Optionnel | Date de traitement du ticket |
+| `onHold` | `Boolean` | Defaut `false` | Indique si le ticket est mis en attente |
 
 Relations :
 
@@ -174,6 +180,126 @@ Cette table contient les jours feries ou jours de fermeture.
 | `label` | `String?` | Optionnel | Description du jour ferie |
 | `createdAt` | `DateTime` | Defaut `now()` | Date de creation |
 
+### 6. `charges`
+
+Modele Prisma : `Charge`
+
+Cette table contient les charges ou conseillers qui recoivent les rendez-vous.
+
+| Colonne | Type | Contraintes | Description |
+|---|---|---|---|
+| `id` | `Int` | Cle primaire, auto-increment | Identifiant interne de la charge |
+| `code` | `String` | Unique, obligatoire | Code interne de la charge |
+| `name` | `String` | Obligatoire | Nom de la charge |
+| `agencyId` | `Int` | Cle etrangere vers `agencies.id` | Agence de rattachement |
+| `email` | `String?` | Optionnel | Adresse email de la charge |
+| `phone` | `String?` | Optionnel | Numero de telephone |
+| `outlookEmail` | `String?` | Optionnel | Email utilise pour Outlook |
+| `outlookRefreshToken` | `String?` | Optionnel | Token de rafraichissement Outlook |
+| `isActive` | `Boolean` | Defaut `true` | Etat actif/inactif |
+| `createdAt` | `DateTime` | Defaut `now()` | Date de creation |
+| `updatedAt` | `DateTime` | Mis a jour automatiquement | Date de derniere modification |
+
+Contraintes et relations :
+
+- `code` est unique.
+- `agencyId` reference `agencies.id`.
+- Suppression en cascade : les donnees de la charge sont supprimees avec son agence.
+- Une charge possede plusieurs disponibilites, blocages et rendez-vous.
+
+### 7. `charge_availabilities`
+
+Modele Prisma : `ChargeAvailability`
+
+Cette table definit les horaires habituels de disponibilite d'une charge par jour de la semaine.
+
+| Colonne | Type | Contraintes | Description |
+|---|---|---|---|
+| `id` | `Int` | Cle primaire, auto-increment | Identifiant interne |
+| `chargeId` | `Int` | Cle etrangere vers `charges.id` | Charge concernee |
+| `weekday` | `Int` | Obligatoire | Jour de la semaine |
+| `enabled` | `Boolean` | Defaut `false` | Disponibilite active ou non |
+| `startTime` | `String` | Defaut `08:30` | Heure de debut |
+| `endTime` | `String` | Defaut `16:00` | Heure de fin |
+| `slotMinutes` | `Int` | Defaut `30` | Duree d'un rendez-vous en minutes |
+
+Contraintes :
+
+- `@@unique([chargeId, weekday])` : une seule configuration par charge et par jour.
+- Suppression en cascade lorsque la charge est supprimee.
+
+### 8. `charge_day_blocks`
+
+Modele Prisma : `ChargeDayBlock`
+
+Cette table contient les indisponibilites exceptionnelles d'une charge.
+
+| Colonne | Type | Contraintes | Description |
+|---|---|---|---|
+| `id` | `Int` | Cle primaire, auto-increment | Identifiant interne |
+| `chargeId` | `Int` | Cle etrangere vers `charges.id` | Charge concernee |
+| `date` | `String` | Obligatoire | Date du blocage |
+| `startTime` | `String?` | Optionnel | Heure de debut du blocage |
+| `endTime` | `String?` | Optionnel | Heure de fin du blocage |
+| `allDay` | `Boolean` | Defaut `false` | Blocage pour toute la journee |
+| `label` | `String?` | Optionnel | Motif ou libelle du blocage |
+| `createdAt` | `DateTime` | Defaut `now()` | Date de creation |
+
+Contraintes et index :
+
+- Index `@@index([chargeId, date])` pour rechercher les blocages d'une charge par date.
+- Suppression en cascade lorsque la charge est supprimee.
+
+### 9. `appointments`
+
+Modele Prisma : `Appointment`
+
+Cette table contient les rendez-vous pris avec une charge dans une agence.
+
+| Colonne | Type | Contraintes | Description |
+|---|---|---|---|
+| `id` | `Int` | Cle primaire, auto-increment | Identifiant interne du rendez-vous |
+| `reference` | `String` | Unique, obligatoire | Reference publique du rendez-vous |
+| `chargeId` | `Int` | Cle etrangere vers `charges.id` | Charge concernee |
+| `agencyId` | `Int` | Cle etrangere vers `agencies.id` | Agence concernee |
+| `date` | `String` | Obligatoire | Date du rendez-vous |
+| `time` | `String` | Obligatoire | Heure du rendez-vous |
+| `customerName` | `String` | Obligatoire | Nom du client |
+| `customerPhone` | `String` | Obligatoire | Telephone du client |
+| `customerEmail` | `String?` | Optionnel | Email du client |
+| `subject` | `String?` | Optionnel | Objet du rendez-vous |
+| `outlookEventId` | `String?` | Optionnel | Identifiant de l'evenement Outlook |
+| `status` | `String` | Defaut `CONFIRMED` | Statut du rendez-vous |
+| `createdAt` | `DateTime` | Defaut `now()` | Date de creation |
+
+Contraintes et relations :
+
+- `reference` est unique.
+- `@@unique([chargeId, date, time])` : une charge ne peut pas avoir deux rendez-vous au meme moment.
+- Les relations vers la charge et l'agence utilisent la suppression en cascade.
+
+### 10. `service_hours`
+
+Modele Prisma : `ServiceHours`
+
+Cette table contient la configuration generale des horaires de service.
+
+| Colonne | Type | Contraintes | Description |
+|---|---|---|---|
+| `key` | `String` | Cle primaire, defaut `default` | Cle de la configuration |
+| `activeMode` | `String` | Defaut `service` | Mode horaire actif |
+| `singleSessionStart` | `String` | Defaut `08:00` | Debut de la session normale |
+| `singleSessionEnd` | `String` | Defaut `16:30` | Fin de la session normale |
+| `singleSessionStartMonth` | `String?` | Optionnel | Mois de debut de la periode speciale |
+| `singleSessionEndMonth` | `String?` | Optionnel | Mois de fin de la periode speciale |
+| `ramadanEnabled` | `Boolean` | Defaut `false` | Active les horaires de Ramadan |
+| `ramadanMonth` | `String?` | Optionnel | Mois de Ramadan |
+| `ramadanStartDate` | `String?` | Optionnel | Date de debut de Ramadan |
+| `ramadanEndDate` | `String?` | Optionnel | Date de fin de Ramadan |
+| `ramadanStartTime` | `String` | Defaut `08:00` | Heure de debut pendant Ramadan |
+| `ramadanEndTime` | `String` | Defaut `14:00` | Heure de fin pendant Ramadan |
+| `updatedAt` | `DateTime` | Mis a jour automatiquement | Date de derniere modification |
+
 ## Enum `TicketStatus`
 
 L'enum `TicketStatus` definit les statuts possibles d'un ticket.
@@ -198,9 +324,9 @@ daily_counters utilise agencies.id via agencyId
 
 Le fichier `prisma/seed.ts` cree :
 
-- 44 agences BTK.
+- 45 agences BTK.
 - 3 guichets par agence.
-- Un PIN chiffre pour chaque agence.
+- Un PIN chiffre par defaut pour chaque agence.
 
 Commande :
 

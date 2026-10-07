@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'BTKticket - BTK Bank',
+  title: 'BTK Easy - BTK Bank',
   description: 'Gestion de tickets en ligne - BTK Bank',
   icons: {
     icon: '/BTK.png',

@@ -8,6 +8,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const data: any = {}
   if (body.name) data.name = body.name
   if (body.city) data.city = body.city
+  if (body.address !== undefined) data.address = body.address
+  if (body.latitude !== undefined) data.latitude = body.latitude
+  if (body.longitude !== undefined) data.longitude = body.longitude
   if (body.pin) data.pin = await bcrypt.hash(String(body.pin), 10)
   if (body.isActive !== undefined) data.isActive = body.isActive
   const agency = await prisma.agency.update({ where: { id }, data })

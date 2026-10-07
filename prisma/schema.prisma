@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -12,10 +12,15 @@ model Agency {
   code        String    @unique
   name        String
   city        String
+  address     String?
+  latitude    Float?
+  longitude   Float?
   pin         String
   isActive    Boolean   @default(true)
   guichets    Guichet[]
   tickets     Ticket[]
+  charges     Charge[]
+  appointments Appointment[]
   createdAt   DateTime  @default(now())
   @@map("agencies")
 }
@@ -47,6 +52,7 @@ model Ticket {
   createdAt   DateTime     @default(now())
   calledAt    DateTime?
   servedAt    DateTime?
+  onHold      Boolean   @default(false)
   @@map("tickets")
 }
 
@@ -65,6 +71,89 @@ model Holiday {
   label     String?
   createdAt DateTime @default(now())
   @@map("holidays")
+}
+
+model Charge {
+  id             Int                  @id @default(autoincrement())
+  code           String               @unique
+  name           String
+  agencyId       Int
+  agency         Agency               @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  email          String?
+  phone          String?
+  outlookEmail   String?
+  outlookRefreshToken String?
+  isActive       Boolean              @default(true)
+  availabilities ChargeAvailability[]
+  dayBlocks      ChargeDayBlock[]
+  appointments   Appointment[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  @@map("charges")
+}
+
+model ChargeAvailability {
+  id          Int      @id @default(autoincrement())
+  chargeId    Int
+  charge      Charge   @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  weekday     Int
+  enabled     Boolean  @default(false)
+  startTime   String   @default("08:30")
+  endTime     String   @default("16:00")
+  slotMinutes Int      @default(30)
+  @@unique([chargeId, weekday])
+  @@map("charge_availabilities")
+}
+
+model ChargeDayBlock {
+  id        Int      @id @default(autoincrement())
+  chargeId  Int
+  charge    Charge   @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  date      String
+  startTime String?
+  endTime   String?
+  allDay    Boolean  @default(false)
+  label     String?
+  createdAt DateTime @default(now())
+  @@index([chargeId, date])
+  @@map("charge_day_blocks")
+}
+
+model Appointment {
+  id            Int      @id @default(autoincrement())
+  reference     String   @unique
+  chargeId      Int
+  charge        Charge   @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  agencyId      Int
+  agency        Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  date          String
+  time          String
+  customerName  String
+  customerPhone String
+  customerEmail String?
+  subject       String?
+  outlookEventId String?
+  status        String   @default("CONFIRMED")
+  createdAt     DateTime @default(now())
+  @@unique([chargeId, date, time])
+  @@map("appointments")
+}
+
+model ServiceHours {
+  key                String   @id @default("default")
+  activeMode         String   @default("service")
+  singleSessionStart String   @default("08:00")
+  singleSessionEnd   String   @default("16:30")
+  singleSessionStartMonth String?
+  singleSessionEndMonth   String?
+  ramadanEnabled     Boolean  @default(false)
+  ramadanMonth       String?
+  ramadanStartDate   String?
+  ramadanEndDate     String?
+  ramadanStartTime   String   @default("08:00")
+  ramadanEndTime     String   @default("14:00")
+  updatedAt          DateTime @updatedAt
+  @@map("service_hours")
 }
 
 enum TicketStatus {

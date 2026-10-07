@@ -4,6 +4,11 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 for %%R in ("%CD%") do set "PROJECT_ROOT=%%~fR"
 
+set "PORTABLE_NODE=%PROJECT_ROOT%\.tools\node-runtime\node-v24.21.0-win-x64"
+if exist "%PORTABLE_NODE%\node.exe" (
+  set "PATH=%PORTABLE_NODE%;%PORTABLE_NODE%\node_modules\npm\bin;%PATH%"
+)
+
 if /i "%~1"=="cache-loop" goto cache_loop
 
 echo ========================================

@@ -4,13 +4,25 @@ import { io, Socket } from 'socket.io-client'
 
 let socket: Socket | null = null
 const SOCKET_INIT_ENDPOINT = '/api/socket'
-const SOCKET_PATH = '/api/socket/io/'
+const SOCKET_PATH = '/api/socket/io'
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io({ path: SOCKET_PATH })
+    socket = io({
+      path: SOCKET_PATH,
+      autoConnect: false,
+    })
   }
   return socket
+}
+
+async function canUseSocket() {
+  try {
+    const res = await fetch(`${SOCKET_INIT_ENDPOINT}?t=${Date.now()}`, { cache: 'no-store' })
+    return res.ok
+  } catch {
+    return false
+  }
 }
 
 export function useAgencySocket(agencyId: number | null, handlers: {
@@ -33,15 +45,16 @@ export function useAgencySocket(agencyId: number | null, handlers: {
       if (active) s?.emit('join-agency', agencyId)
     }
 
-    fetch(`${SOCKET_INIT_ENDPOINT}?t=${Date.now()}`, { cache: 'no-store' })
-      .catch(() => null)
-      .then(() => {
+    canUseSocket()
+      .then(ready => {
+        if (!ready) return
         if (!active) return
         s = getSocket()
         s.on('ticket-update', onUpdate)
         s.on('new-ticket', onNew)
         s.on('number-called', onCalled)
         s.on('connect', joinAgency)
+        if (!s.connected) s.connect()
         if (s.connected) joinAgency()
       })
 

@@ -5,7 +5,7 @@ Système de gestion de tickets en ligne pour les 44 agences BTK Bank.
 ## Stack technique
 - **Frontend** : Next.js 14, TypeScript, Tailwind CSS
 - **Backend** : Next.js API Routes, Socket.io (WebSocket temps réel)
-- **Base de données** : PostgreSQL + Prisma ORM
+- **Base de données** : MySQL/MariaDB (XAMPP/phpMyAdmin) + Prisma ORM
 - **QR Code** : qrcode npm
 - **Auth** : bcryptjs (PIN par agence)
 
@@ -27,7 +27,7 @@ Système de gestion de tickets en ligne pour les 44 agences BTK Bank.
 
 ### 1. Prérequis
 - Node.js 18+
-- PostgreSQL 14+
+- XAMPP avec MySQL/MariaDB démarré (port 3306)
 
 ### 2. Installer les dépendances
 ```bash
@@ -38,8 +38,8 @@ npm install
 ### 3. Configurer la base de données
 ```bash
 cp .env.example .env
-# Éditer .env avec vos credentials PostgreSQL
-# DATABASE_URL="postgresql://user:password@localhost:5432/btkticket"
+# Éditer .env avec vos credentials MySQL/MariaDB
+# DATABASE_URL="mysql://root:motdepasse@127.0.0.1:3306/btkticket"
 ```
 
 ### 4. Créer la base et peupler
@@ -106,6 +106,14 @@ Client browser ──WebSocket──► Socket.io Server (Next.js)
 - Timezone : Africa/Tunis (UTC+1)
 - Hors horaires : prise de ticket bloquée côté API et UI
 
+## Notifications des rendez-vous
+
+Chaque chargé doit avoir une adresse e-mail dans le dashboard Admin. À la confirmation d'un RDV, BTK Easy lui envoie une invitation Outlook compatible (.ics) ; à l'annulation, il envoie une mise à jour qui supprime le même événement du calendrier. Configurez `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM` et, si besoin, `MAIL_USER` / `MAIL_PASSWORD` dans `.env` pour utiliser votre SMTP de production. `CALENDAR_ORGANIZER_EMAIL` est l'adresse affichée comme organisateur de l'invitation.
+
+### Synchronisation directe Outlook (Microsoft Graph)
+
+Créez une application **Web** dans Microsoft Entra ID, ajoutez l'URI de redirection `https://votre-domaine/api/outlook/callback`, puis accordez les permissions déléguées `User.Read` et `Calendars.ReadWrite` (un administrateur peut devoir donner son consentement). Renseignez `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_REDIRECT_URI` et `MICROSOFT_TOKEN_ENCRYPTION_KEY` dans `.env`. Chaque chargé se connecte ensuite une fois via **Connecter Outlook** dans son dashboard. Les nouveaux RDV sont créés directement dans son calendrier ; leurs annulations sont supprimées automatiquement.
+
 ## Numérotation par agence
 - Chaque agence a son propre compteur journalier (`DailyCounter`)
 - Réinitialisation automatique chaque jour à minuit
@@ -144,3 +152,19 @@ prisma/
 ├── schema.prisma
 └── seed.ts
 ```
+
+
+
+
+Dans Powershell
+mailcatcher --ip 127.0.0.1 --smtp-port 1025 --http-port 1080
+
+
+
+
+npm.cmd run dev
+npm.cmd start
+
+Si le serveur continue sur le port 3000 :
+Get-NetTCPConnection -LocalPort 3000
+Stop-Process -Id PID -Force

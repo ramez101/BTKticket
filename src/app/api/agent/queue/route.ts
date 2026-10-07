@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     }),
     prisma.ticket.findMany({
       where: { agencyId, status: 'WAITING', dayDate: today },
-      orderBy: { number: 'asc' }, take: 30
+      orderBy: [{ onHold: 'asc' }, { number: 'asc' }], take: 30
     }),
     !isNaN(guichetId) ? prisma.ticket.findFirst({
       where: { agencyId, guichetId, status: 'CALLED', dayDate: today }

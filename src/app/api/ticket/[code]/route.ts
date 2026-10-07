@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getAgencyWaitTime } from '@/lib/wait-time'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,8 +40,13 @@ export async function GET(_req: NextRequest, { params }: { params: { code: strin
     orderBy: { calledAt: 'desc' }
   })
 
-  // Estimate presentation time
-  const estimatedMinutes = ahead * 4
+  // Estimate presentation time from the latest real ticket passage durations.
+  const waitTime = await getAgencyWaitTime({
+    agencyId,
+    dayDate: date,
+    waitingCount: ticket.status === 'WAITING' ? ahead + 1 : 0,
+  })
+  const estimatedMinutes = waitTime.estimatedWait
   const presentAt = new Date(Date.now() + estimatedMinutes * 60 * 1000)
     .toLocaleTimeString('fr-TN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Africa/Tunis' })
 
@@ -53,6 +59,7 @@ export async function GET(_req: NextRequest, { params }: { params: { code: strin
       status: ticket.status,
       createdAt: ticket.createdAt.toISOString(),
       guichet: ticket.guichet?.label ?? null,
+      qrCode: ticket.qrCode,
     },
     agency: {
       name: ticket.agency.name,
@@ -63,6 +70,8 @@ export async function GET(_req: NextRequest, { params }: { params: { code: strin
     ahead,
     presentAt,
     estimatedMinutes,
+    averagePassageMinutes: waitTime.averagePassageMinutes,
+    passageSampleSize: waitTime.passageSampleSize,
     currentCalled: called?.number ?? 0,
     currentGuichet: called?.guichet?.label ?? null,
   })

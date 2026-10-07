@@ -1,5 +1,6 @@
 export interface AgencyInfo {
   id: number; code: string; name: string; city: string
+  address?: string | null; latitude?: number | null; longitude?: number | null
   currentCalled: number; lastServed: number
   waitingCount: number; estimatedWait: number; isActive: boolean
 }

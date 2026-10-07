@@ -2,7 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getIO } from '@/lib/socket-server'
 import { getServiceStatus, todayDate } from '@/lib/hours'
+import { getAgencyWaitTime } from '@/lib/wait-time'
+import { sendTicketWaitNotification } from '@/lib/mail'
 import QRCode from 'qrcode'
+
+function getTicketBaseUrl(req: NextRequest) {
+  const configured = process.env.NEXT_PUBLIC_BASE_URL?.trim()
+
+  if (configured && !configured.includes('localhost') && !configured.includes('127.0.0.1')) {
+    return configured.replace(/\/$/, '')
+  }
+
+  return req.nextUrl.origin
+}
 
 export async function POST(req: NextRequest) {
   const serviceStatus = await getServiceStatus()
@@ -10,8 +22,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: serviceStatus.message }, { status: 403 })
   }
 
-  const { agencyId, service } = await req.json()
+  const { agencyId, service, notificationMode, customerPhone } = await req.json()
   if (!agencyId || !service) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  if (notificationMode === 'phone' && (!customerPhone || typeof customerPhone !== 'string' || !customerPhone.trim())) {
+    return NextResponse.json({ error: 'Numero de telephone requis pour la notification' }, { status: 400 })
+  }
 
   const today = todayDate()
 
@@ -23,11 +38,17 @@ export async function POST(req: NextRequest) {
 
   const number = counter.counter
   const label = number.toString()
-  const agency = await prisma.agency.findUnique({ where: { id: agencyId }, select: { name: true } })
+  const agency = await prisma.agency.findUnique({
+    where: { id: agencyId },
+    select: {
+      name: true,
+      guichets: { where: { isActive: true }, select: { id: true } },
+    },
+  })
 
   const qrPayload = Buffer.from(JSON.stringify({ label, agencyId, service, date: today })).toString('base64url')
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-  const qrUrl = `${baseUrl}/ticket/${qrPayload}`
+  const baseUrl = getTicketBaseUrl(req)
+  const qrUrl = `${baseUrl}/?ticket=${encodeURIComponent(qrPayload)}`
   const qrCode = await QRCode.toDataURL(qrUrl, { width: 220, margin: 1, color: { dark: '#1565C0', light: '#ffffff' } })
 
   const ticket = await prisma.ticket.create({
@@ -35,10 +56,35 @@ export async function POST(req: NextRequest) {
   })
 
   const waitingCount = await prisma.ticket.count({ where: { agencyId, status: 'WAITING', dayDate: today } })
+  const waitTime = await getAgencyWaitTime({
+    agencyId,
+    dayDate: today,
+    waitingCount,
+    openGuichets: agency?.guichets.length ?? 0,
+  })
+  const currentTicket = await prisma.ticket.findFirst({
+    where: { agencyId, dayDate: today, status: 'CALLED' },
+    orderBy: { calledAt: 'desc' },
+    select: { number: true },
+  })
+  const notification = notificationMode === 'phone'
+    ? await sendTicketWaitNotification({
+      customerPhone: customerPhone.trim(),
+      ticketNumber: number,
+      currentTicketNumber: currentTicket?.number ?? null,
+      estimatedWaitMinutes: waitTime.estimatedWait,
+        agencyName: agency?.name ?? 'votre agence',
+      })
+    : { sent: false, reason: 'guest' as const }
 
   const io = getIO()
   if (io) {
-    io.to(`agency-${agencyId}`).emit('ticket-update', { waitingCount, estimatedWait: waitingCount * 4 })
+    io.to(`agency-${agencyId}`).emit('ticket-update', {
+      waitingCount,
+      estimatedWait: waitTime.estimatedWait,
+      averagePassageMinutes: waitTime.averagePassageMinutes,
+      passageSampleSize: waitTime.passageSampleSize,
+    })
     io.to(`agency-${agencyId}`).emit('new-ticket', {
       id: ticket.id,
       number,
@@ -63,6 +109,9 @@ export async function POST(req: NextRequest) {
     qrUrl,
     createdAt: ticket.createdAt.toISOString(),
     waitingCount,
-    estimatedWait: waitingCount * 4,
+    estimatedWait: waitTime.estimatedWait,
+    averagePassageMinutes: waitTime.averagePassageMinutes,
+    passageSampleSize: waitTime.passageSampleSize,
+    notification,
   })
 }

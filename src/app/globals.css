@@ -4,15 +4,23 @@
 @tailwind utilities;
 
 :root {
-  --btk-blue: #1565C0;
-  --btk-light: #1976D2;
-  --btk-dark: #0D47A1;
-  --btk-bg: #E3F2FD;
-  --btk-accent: #0288D1;
+  --btk-blue: #0065A1;
+  --btk-light: #1978BE;
+  --btk-dark: #003A66;
+  --btk-bg: #EAF5FF;
+  --btk-accent: #1780C9;
 }
 
 * { box-sizing: border-box; }
-body { font-family: 'Inter', sans-serif; background: #F5F7FA; }
+html { min-height: 100%; background: #F5F7FA; }
+body {
+  min-height: 100dvh;
+  width: 100%;
+  margin: 0;
+  overflow-x: hidden;
+  font-family: 'Inter', sans-serif;
+  background: #F5F7FA;
+}
 
 .font-gotu { font-family: Gotu, Inter, Arial, sans-serif; }
 

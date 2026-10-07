@@ -11,6 +11,7 @@ interface QueueTicket {
   label: string
   service: string
   createdAt: string
+  onHold?: boolean
 }
 
 interface CalledTicket {
@@ -68,7 +69,7 @@ export default function AgentPage() {
     onNewTicket: () => fetchQueue(),
   })
 
-  async function callNext(action: 'next' | 'absent') {
+  async function callNext(action: 'next' | 'absent' | 'hold' | 'recall', ticketId?: number) {
     if (!selectedAgency || !auth) return
     setLoading(true)
 
@@ -81,12 +82,19 @@ export default function AgentPage() {
           guichetId: auth.guichetId,
           guichetLabel: auth.guichetLabel,
           action,
+          ticketId,
         }),
       })
 
       if (res.ok) {
         const data = await res.json()
-        setLastAction(`${action === 'next' ? 'Appel' : 'Absent'} ${data.called.number} - ${auth.guichetLabel}`)
+        if (action === 'hold') {
+          setLastAction(data.called ? `Ticket ${data.called.number} appele - ${auth.guichetLabel}` : 'Ticket mis en attente')
+        } else if (action === 'recall') {
+          setLastAction(data.called ? `Ticket ${data.called.number} relance - ${auth.guichetLabel}` : 'Relance effectuee')
+        } else {
+          setLastAction(`${action === 'next' ? 'Appel' : 'Absent'} ${data.called?.number ?? ''} - ${auth.guichetLabel}`)
+        }
         fetchQueue()
       } else {
         const err = await res.json()
@@ -189,7 +197,6 @@ export default function AgentPage() {
         <AgentHeader subtitle={selectedAgency.name} />
         {showPin && (
           <PinModal
-            agencyId={selectedAgency.id}
             agencyName={selectedAgency.name}
             guichets={selectedAgency.guichets || []}
             onSuccess={handlePinSuccess}
@@ -201,10 +208,10 @@ export default function AgentPage() {
             <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-lg bg-blue-50">
               <img src="/BTK.png" alt="BTK" className="h-9 w-auto" />
             </div>
-            <p className="text-sm font-semibold uppercase text-btk-blue">Authentification</p>
+            <p className="text-sm font-semibold uppercase text-btk-blue">Connexion guichet</p>
             <h1 className="mt-2 text-2xl font-bold text-gray-900">{selectedAgency.name}</h1>
             <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-gray-500">
-              Connectez-vous avec le PIN agence pour acceder a votre guichet.
+              Choisissez votre guichet pour acceder a l'espace agent.
             </p>
             <button className="mt-6 rounded-lg bg-btk-blue px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-btk-dark" onClick={() => setShowPin(true)}>
               Se connecter
@@ -314,6 +321,13 @@ export default function AgentPage() {
                     >
                       Client absent
                     </button>
+                    <button
+                      className="rounded-lg border border-gray-200 bg-white px-5 py-3 font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      onClick={() => callNext('hold')}
+                      disabled={loading || !myCalled || !guichetActive}
+                    >
+                      Mettre en attente
+                    </button>
                   </div>
                 </div>
               </div>
@@ -384,13 +398,30 @@ export default function AgentPage() {
                     <div className={`text-xl font-black tabular-nums ${i === 0 ? 'text-btk-blue' : 'text-gray-700'}`}>{t.number}</div>
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-gray-700">{t.service}</div>
-                      <div className="mt-1 text-xs text-gray-400">
-                        {new Date(t.createdAt).toLocaleTimeString('fr-TN', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                        <span>{new Date(t.createdAt).toLocaleTimeString('fr-TN', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                        {t.onHold && (
+                          <span className="rounded-full bg-yellow-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-yellow-700 ring-1 ring-yellow-100">
+                            En attente
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${i === 0 ? 'bg-btk-blue text-white' : 'bg-gray-100 text-gray-500'}`}>
-                      {i === 0 ? 'Prochain' : `#${i + 1}`}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${i === 0 ? 'bg-btk-blue text-white' : 'bg-gray-100 text-gray-500'}`}>
+                        {i === 0 ? 'Prochain' : `#${i + 1}`}
+                      </span>
+                      {t.onHold && (
+                        <button
+                          type="button"
+                          onClick={() => callNext('recall', t.id)}
+                          disabled={loading || !guichetActive}
+                          className="rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-1 text-xs font-semibold text-yellow-700 transition hover:bg-yellow-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Relancer
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -409,7 +440,7 @@ function AgentHeader({ subtitle, right }: { subtitle?: string; right?: React.Rea
         <Link href="/" className="flex min-w-0 items-center gap-3">
           <img src="/BTK.png" alt="BTK" className="h-11 w-auto shrink-0" />
           <div className="min-w-0">
-            <div className="text-lg font-bold leading-tight text-gray-900">BTK RDV</div>
+            <div className="text-lg font-bold leading-tight text-gray-900">BTK Easy</div>
             <div className="truncate text-xs font-medium text-gray-500">{subtitle || 'Espace agent'}</div>
           </div>
         </Link>

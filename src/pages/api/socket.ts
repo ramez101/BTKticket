@@ -23,7 +23,7 @@ export default function handler(_req: NextApiRequest, res: NextApiResponseWithSo
 
   if (!res.socket.server.io) {
     const io = new IOServer(res.socket.server, {
-      path: '/api/socket/io/',
+      path: '/api/socket/io',
       cors: { origin: '*' },
     })
 

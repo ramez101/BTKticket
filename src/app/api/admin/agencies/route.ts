@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { todayDate } from '@/lib/hours'
+import { getAgencyWaitTimeMap } from '@/lib/wait-time'
 import bcrypt from 'bcryptjs'
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,9 @@ export async function GET() {
         code: true,
         name: true,
         city: true,
+        address: true,
+        latitude: true,
+        longitude: true,
         isActive: true,
         createdAt: true,
         guichets: { orderBy: { number: 'asc' } },
@@ -52,26 +56,40 @@ export async function GET() {
     statsByAgency.set(row.agencyId, current)
   }
 
+  const waitTimes = await getAgencyWaitTimeMap(
+    agencies.map(agency => ({
+      id: agency.id,
+      waitingCount: statsByAgency.get(agency.id)?.waiting ?? 0,
+      openGuichets: agency.guichets.filter(g => g.isActive).length,
+    })),
+    today,
+  )
+
   return NextResponse.json(agencies.map(agency => ({
     ...agency,
-    todayStats: statsByAgency.get(agency.id) ?? {
+    todayStats: {
+      ...(statsByAgency.get(agency.id) ?? {
       waiting: 0,
       called: 0,
       served: 0,
       absent: 0,
       total: 0,
+      }),
+      estimatedWait: waitTimes.get(agency.id)?.estimatedWait ?? 0,
+      averagePassageMinutes: waitTimes.get(agency.id)?.averagePassageMinutes ?? 4,
+      passageSampleSize: waitTimes.get(agency.id)?.passageSampleSize ?? 0,
     },
   })))
 }
 
 export async function POST(req: NextRequest) {
-  const { name, city, pin } = await req.json()
+  const { name, city, pin, address, latitude, longitude } = await req.json()
   if (!name || !city || !pin) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   const count = await prisma.agency.count()
   const code = `AG${String(count + 1).padStart(2, '0')}`
   const hashedPin = await bcrypt.hash(String(pin), 10)
   const agency = await prisma.agency.create({
-    data: { code, name, city, pin: hashedPin },
+    data: { code, name, city, address, latitude, longitude, pin: hashedPin },
   })
   // Create 3 default guichets
   for (let g = 1; g <= 3; g++) {
