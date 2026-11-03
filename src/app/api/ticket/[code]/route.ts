@@ -24,14 +24,27 @@ export async function GET(_req: NextRequest, { params }: { params: { code: strin
   if (!ticket) return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
 
   // Count how many WAITING tickets are ahead
-  const ahead = await prisma.ticket.count({
-    where: {
-      agencyId,
-      status: 'WAITING',
-      dayDate: date,
-      number: { lt: ticket.number }
-    }
-  })
+  const ahead = ticket.onHold
+    ? await prisma.ticket.count({
+      where: {
+        agencyId,
+        status: 'WAITING',
+        dayDate: date,
+        OR: [
+          { onHold: false },
+          { onHold: true, number: { lt: ticket.number } },
+        ],
+      },
+    })
+    : await prisma.ticket.count({
+      where: {
+        agencyId,
+        status: 'WAITING',
+        dayDate: date,
+        onHold: false,
+        number: { lt: ticket.number },
+      },
+    })
 
   // Current called number
   const called = await prisma.ticket.findFirst({
@@ -45,6 +58,8 @@ export async function GET(_req: NextRequest, { params }: { params: { code: strin
     agencyId,
     dayDate: date,
     waitingCount: ticket.status === 'WAITING' ? ahead + 1 : 0,
+    targetTicketNumber: ticket.status === 'WAITING' ? ticket.number : undefined,
+    targetService: ticket.status === 'WAITING' ? ticket.service : undefined,
   })
   const estimatedMinutes = waitTime.estimatedWait
   const presentAt = new Date(Date.now() + estimatedMinutes * 60 * 1000)

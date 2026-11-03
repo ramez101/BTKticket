@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { SERVICES } from '@/types'
 import { formatInternationalPhone } from '@/lib/phone-countries'
 import { PhoneCountrySelect } from '@/components/shared/PhoneCountrySelect'
+import BTKHeader from '@/components/shared/BTKHeader'
 
 type KioskMode = 'guest' | 'phone'
 
@@ -39,7 +40,7 @@ export default function BornePage() {
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const status = await fetch('/api/service-status').then(r => r.json())
+      const status = await fetch('/api/service-status', { cache: 'no-store' }).then(r => r.json())
         setIsOpen(Boolean(status.open))
       } catch {
         setIsOpen(false)
@@ -113,7 +114,7 @@ export default function BornePage() {
 
   if (!selectedAgency) {
     return (
-      <main className="flex min-h-screen flex-col bg-[#F3F8FC]">
+      <main className="workspace-page borne-page flex min-h-screen flex-col bg-[#F3F8FC]">
         <KioskHeader clock={clock} dateStr={dateStr} />
 
         <section className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-6 py-8">
@@ -157,7 +158,7 @@ export default function BornePage() {
 
   if (!serviceScreenOpen) {
     return (
-      <main className="flex min-h-[100dvh] flex-col bg-gradient-to-br from-white via-[#edf7ff] to-[#d8ebff]">
+      <main className="workspace-page borne-page flex min-h-[100dvh] flex-col bg-gradient-to-br from-white via-[#edf7ff] to-[#d8ebff]">
         <KioskHeader clock={clock} dateStr={dateStr} agencyName={selectedAgency.name} />
 
         <section className="mx-auto flex w-full max-w-6xl flex-1 items-center px-5 py-8 sm:px-6">
@@ -257,7 +258,7 @@ export default function BornePage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#F3F8FC]">
+    <main className="workspace-page borne-page flex min-h-screen flex-col bg-[#F3F8FC]">
       <KioskHeader clock={clock} dateStr={dateStr} agencyName={selectedAgency.name} />
 
       <section className="mx-auto flex w-full max-w-6xl flex-1 items-center px-6 py-8">
@@ -404,22 +405,15 @@ function TicketCard({ ticket, clock }: { ticket: any; clock: string }) {
 
 function KioskHeader({ clock, dateStr, agencyName }: { clock: string; dateStr: string; agencyName?: string }) {
   return (
-    <header className="shrink-0 border-b border-blue-100 bg-white shadow-sm">
-      <div className="mx-auto flex min-h-[82px] w-full max-w-7xl items-center justify-between gap-4 px-6">
-        <div className="flex min-w-0 items-center gap-4">
-          <img src="/BTK.png" alt="BTK" className="h-12 w-auto shrink-0" />
-          <div className="min-w-0">
-            <div className="text-lg font-bold leading-tight text-gray-900">BTK Easy</div>
-            <div className="truncate text-xs font-medium text-gray-500">{agencyName || 'Borne de tickets'}</div>
-          </div>
-        </div>
-
+    <BTKHeader
+      subtitle={agencyName || 'Borne de tickets'}
+      right={(
         <div className="text-right">
-          <div className="font-mono text-2xl font-semibold text-gray-900">{clock}</div>
-          <div className="text-sm capitalize text-gray-500">{dateStr}</div>
+          <div className="font-mono text-lg font-bold tabular-nums text-[#102746]">{clock}</div>
+          <div className="hidden text-xs capitalize text-slate-500 sm:block">{dateStr}</div>
         </div>
-      </div>
-    </header>
+      )}
+    />
   )
 }
 

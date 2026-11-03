@@ -41,11 +41,18 @@ echo Nettoyage automatique du cache active toutes les 24h.
 start "BTK cache cleaner" /min "%~f0" cache-loop
 echo.
 
-echo Lancement sur http://localhost:3000
+set "LAN_IP="
+for /f "tokens=2 delims=:" %%I in ('ipconfig ^| findstr /C:"IPv4"') do if not defined LAN_IP set "LAN_IP=%%I"
+for /f "tokens=* delims= " %%I in ("!LAN_IP!") do set "LAN_IP=%%I"
+if not defined LAN_IP set "LAN_IP=127.0.0.1"
+
+echo Lancement local sur http://localhost:3000
+echo Acces depuis le telephone : http://!LAN_IP!:3000
+echo Le telephone et le PC doivent etre sur le meme Wi-Fi.
 echo Gardez cette fenetre ouverte pour laisser le serveur actif.
 echo.
 
-call npm run dev
+call npm run dev:lan
 
 echo.
 echo Le serveur s'est arrete.

@@ -8,59 +8,68 @@ datasource db {
 }
 
 model Agency {
-  id          Int       @id @default(autoincrement())
-  code        String    @unique
-  name        String
-  city        String
-  address     String?
-  latitude    Float?
-  longitude   Float?
-  pin         String
-  isActive    Boolean   @default(true)
-  guichets    Guichet[]
-  tickets     Ticket[]
-  charges     Charge[]
+  id           Int           @id @default(autoincrement())
+  code         String        @unique
+  name         String
+  city         String
+  address      String?
+  latitude     Float?
+  longitude    Float?
+  pin          String
+  isActive     Boolean       @default(true)
+  guichets     Guichet[]
+  tickets      Ticket[]
+  charges      Charge[]
   appointments Appointment[]
-  createdAt   DateTime  @default(now())
+  createdAt    DateTime      @default(now())
+
   @@map("agencies")
 }
 
 model Guichet {
-  id        Int       @id @default(autoincrement())
-  number    Int
-  label     String
-  agencyId  Int
-  agency    Agency    @relation(fields: [agencyId], references: [id], onDelete: Cascade)
-  tickets   Ticket[]
-  isActive  Boolean   @default(true)
+  id       Int      @id @default(autoincrement())
+  number   Int
+  label    String
+  agencyId Int
+  agency   Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  tickets  Ticket[]
+  isActive Boolean  @default(true)
+
   @@unique([agencyId, number])
   @@map("guichets")
 }
 
 model Ticket {
-  id          Int          @id @default(autoincrement())
-  number      Int
-  label       String
-  service     String
-  status      TicketStatus @default(WAITING)
-  qrCode      String?
-  agencyId    Int
-  agency      Agency       @relation(fields: [agencyId], references: [id])
-  guichetId   Int?
-  guichet     Guichet?     @relation(fields: [guichetId], references: [id])
-  dayDate     String
-  createdAt   DateTime     @default(now())
-  calledAt    DateTime?
-  servedAt    DateTime?
-  onHold      Boolean   @default(false)
+  id                 Int                @id @default(autoincrement())
+  number             Int
+  initialPosition    Int                @default(1)
+  label              String
+  service            String
+  status             TicketStatus       @default(WAITING)
+  qrCode             String?
+  agencyId           Int
+  agency             Agency             @relation(fields: [agencyId], references: [id])
+  guichetId          Int?
+  guichet            Guichet?           @relation(fields: [guichetId], references: [id])
+  dayDate            String
+  createdAt          DateTime           @default(now())
+  calledAt           DateTime?
+  servedAt           DateTime?
+  onHold             Boolean            @default(false)
+  approachNotifiedAt DateTime?
+  calledNotifiedAt   DateTime?
+  lastPushState      String?
+  pushSubscriptions  PushSubscription[]
+
   @@map("tickets")
 }
 
 model DailyCounter {
-  id        Int    @id @default(autoincrement())
-  agencyId  Int
-  dayDate   String
-  counter   Int    @default(0)
+  id       Int    @id @default(autoincrement())
+  agencyId Int
+  dayDate  String
+  counter  Int    @default(0)
+
   @@unique([agencyId, dayDate])
   @@map("daily_counters")
 }
@@ -70,37 +79,40 @@ model Holiday {
   date      String   @unique
   label     String?
   createdAt DateTime @default(now())
+
   @@map("holidays")
 }
 
 model Charge {
-  id             Int                  @id @default(autoincrement())
-  code           String               @unique
-  name           String
-  agencyId       Int
-  agency         Agency               @relation(fields: [agencyId], references: [id], onDelete: Cascade)
-  email          String?
-  phone          String?
-  outlookEmail   String?
+  id                  Int                  @id @default(autoincrement())
+  code                String               @unique
+  name                String
+  agencyId            Int
+  agency              Agency               @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  email               String?
+  phone               String?
+  outlookEmail        String?
   outlookRefreshToken String?
-  isActive       Boolean              @default(true)
-  availabilities ChargeAvailability[]
-  dayBlocks      ChargeDayBlock[]
-  appointments   Appointment[]
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  isActive            Boolean              @default(true)
+  availabilities      ChargeAvailability[]
+  dayBlocks           ChargeDayBlock[]
+  appointments        Appointment[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
   @@map("charges")
 }
 
 model ChargeAvailability {
-  id          Int      @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   chargeId    Int
-  charge      Charge   @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  charge      Charge  @relation(fields: [chargeId], references: [id], onDelete: Cascade)
   weekday     Int
-  enabled     Boolean  @default(false)
-  startTime   String   @default("08:30")
-  endTime     String   @default("16:00")
-  slotMinutes Int      @default(30)
+  enabled     Boolean @default(false)
+  startTime   String  @default("08:30")
+  endTime     String  @default("16:00")
+  slotMinutes Int     @default(30)
+
   @@unique([chargeId, weekday])
   @@map("charge_availabilities")
 }
@@ -115,44 +127,67 @@ model ChargeDayBlock {
   allDay    Boolean  @default(false)
   label     String?
   createdAt DateTime @default(now())
+
   @@index([chargeId, date])
   @@map("charge_day_blocks")
 }
 
 model Appointment {
-  id            Int      @id @default(autoincrement())
-  reference     String   @unique
-  chargeId      Int
-  charge        Charge   @relation(fields: [chargeId], references: [id], onDelete: Cascade)
-  agencyId      Int
-  agency        Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
-  date          String
-  time          String
-  customerName  String
-  customerPhone String
-  customerEmail String?
-  subject       String?
-  outlookEventId String?
-  status        String   @default("CONFIRMED")
-  createdAt     DateTime @default(now())
+  id                   Int                @id @default(autoincrement())
+  reference            String             @unique
+  chargeId             Int
+  charge               Charge             @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  agencyId             Int
+  agency               Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  date                 String
+  time                 String
+  customerName         String
+  customerPhone        String
+  customerEmail        String?
+  subject              String?
+  outlookEventId       String?
+  status               String             @default("CONFIRMED")
+  createdAt            DateTime           @default(now())
+  reminder24NotifiedAt DateTime?
+  reminder1NotifiedAt  DateTime?
+  pushSubscriptions    PushSubscription[]
+
   @@unique([chargeId, date, time])
   @@map("appointments")
 }
 
+model PushSubscription {
+  id            Int          @id @default(autoincrement())
+  token         String
+  platform      String?
+  ticketId      Int?
+  ticket        Ticket?      @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  appointmentId Int?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([token])
+  @@index([ticketId])
+  @@index([appointmentId])
+  @@map("push_subscriptions")
+}
+
 model ServiceHours {
-  key                String   @id @default("default")
-  activeMode         String   @default("service")
-  singleSessionStart String   @default("08:00")
-  singleSessionEnd   String   @default("16:30")
+  key                     String   @id @default("default")
+  activeMode              String   @default("service")
+  singleSessionStart      String   @default("08:00")
+  singleSessionEnd        String   @default("16:30")
   singleSessionStartMonth String?
   singleSessionEndMonth   String?
-  ramadanEnabled     Boolean  @default(false)
-  ramadanMonth       String?
-  ramadanStartDate   String?
-  ramadanEndDate     String?
-  ramadanStartTime   String   @default("08:00")
-  ramadanEndTime     String   @default("14:00")
-  updatedAt          DateTime @updatedAt
+  ramadanEnabled          Boolean  @default(false)
+  ramadanMonth            String?
+  ramadanStartDate        String?
+  ramadanEndDate          String?
+  ramadanStartTime        String   @default("08:00")
+  ramadanEndTime          String   @default("14:00")
+  updatedAt               DateTime @updatedAt
+
   @@map("service_hours")
 }
 

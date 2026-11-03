@@ -22,6 +22,7 @@ import {
 import { getServiceWindowForDate } from '@/lib/hours'
 import { sendAppointmentConfirmationEmail, sendChargeAppointmentEmail } from '@/lib/mail'
 import { createOutlookEvent, deleteOutlookEvent } from '@/lib/outlook'
+import { isExpoPushToken, registerPushSubscription, sendPushToTokens } from '@/lib/push'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,6 +104,8 @@ export async function POST(req: NextRequest) {
   const customerPhone = cleanText(body.customerPhone)
   const customerEmail = cleanText(body.customerEmail) || null
   const subject = cleanText(body.subject) || null
+  const pushToken = cleanText(body.pushToken)
+  const pushPlatform = cleanText(body.pushPlatform) || null
 
   if (
     !Number.isFinite(chargeId) ||
@@ -183,7 +186,7 @@ export async function POST(req: NextRequest) {
         reference: appointment.reference,
         cancellationUrl,
       })
-      const chargeEmail = outlook.synced ? { sent: true } : await sendChargeAppointmentEmail({
+      const chargeEmail = await sendChargeAppointmentEmail({
         chargeEmail: charge.email,
         chargeName: charge.name,
         agencyName: charge.agencyName,
@@ -196,12 +199,28 @@ export async function POST(req: NextRequest) {
         subject: appointment.subject,
       }, 'confirmation')
 
+      let pushNotification: unknown = { sent: false, reason: 'no-token' }
+      if (isExpoPushToken(pushToken)) {
+        await registerPushSubscription({ token: pushToken, platform: pushPlatform, appointmentId: appointment.id })
+        const dateLabel = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', timeZone: 'Africa/Tunis' })
+          .format(new Date(`${appointment.date}T12:00:00Z`))
+        pushNotification = await sendPushToTokens([pushToken], {
+          title: 'Rendez-vous confirmé',
+          body: `Votre rendez-vous BTK Easy est confirmé le ${dateLabel} à ${appointment.time.replace(':', ' h ')} avec ${charge.name} à l'agence ${charge.agencyName}.`,
+          data: { type: 'appointment-confirmed', appointmentId: appointment.id, reference: appointment.reference },
+          priority: 'high',
+          sound: 'default',
+          channelId: 'appointments',
+        })
+      }
+
       return NextResponse.json({
         appointment,
         charge,
         email,
         chargeEmail,
         outlook,
+        pushNotification,
       }, { status: 201 })
     } catch (error) {
       if (attempt === 5) console.error(error)
@@ -245,8 +264,10 @@ export async function DELETE(req: NextRequest) {
     }
     if (isAppointmentCancellationExpired(appointment.date, appointment.time)) return { kind: 'expired' as const }
 
+    const pushTokens = (await tx.pushSubscription.findMany({ where: { appointmentId: appointment.id }, select: { token: true } }))
+      .map(item => item.token)
     await tx.appointment.delete({ where: { id: appointment.id } })
-    return { kind: 'deleted' as const, appointment }
+    return { kind: 'deleted' as const, appointment, pushTokens }
   })
 
   if (result.kind === 'not-found') {
@@ -260,7 +281,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   const outlook = await deleteOutlookEvent(result.appointment.chargeId, result.appointment.outlookEventId)
-  const chargeEmail = outlook.synced ? { sent: true } : await sendChargeAppointmentEmail({
+  const chargeEmail = await sendChargeAppointmentEmail({
     chargeEmail: result.appointment.chargeEmail,
     chargeName: result.appointment.chargeName,
     agencyName: result.appointment.agencyName,
@@ -273,10 +294,22 @@ export async function DELETE(req: NextRequest) {
     subject: result.appointment.subject,
   }, 'cancellation')
 
+  const dateLabel = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', timeZone: 'Africa/Tunis' })
+    .format(new Date(`${result.appointment.date}T12:00:00Z`))
+  const pushNotification = await sendPushToTokens(result.pushTokens, {
+    title: 'Mise à jour de votre rendez-vous',
+    body: `Votre rendez-vous BTK Easy du ${dateLabel} à ${result.appointment.time.replace(':', ' h ')} a été annulé. Consultez l'application pour réserver un nouveau créneau.`,
+    data: { type: 'appointment-cancelled', appointmentId: result.appointment.id, reference: result.appointment.reference },
+    priority: 'high',
+    sound: 'default',
+    channelId: 'appointments',
+  })
+
   return NextResponse.json({
     success: true,
     appointment: normalizeAppointment(result.appointment),
     chargeEmail,
     outlook,
+    pushNotification,
   })
 }

@@ -4,6 +4,7 @@ import { getIO } from '@/lib/socket-server'
 import { getServiceStatus, todayDate } from '@/lib/hours'
 import { getAgencyWaitTime } from '@/lib/wait-time'
 import { sendTicketWaitNotification } from '@/lib/mail'
+import { isExpoPushToken, notifyApproachingTickets, notifyTicketConfirmed, registerPushSubscription } from '@/lib/push'
 import QRCode from 'qrcode'
 
 function getTicketBaseUrl(req: NextRequest) {
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: serviceStatus.message }, { status: 403 })
   }
 
-  const { agencyId, service, notificationMode, customerPhone } = await req.json()
+  const { agencyId, service, notificationMode, customerPhone, pushToken, pushPlatform } = await req.json()
   if (!agencyId || !service) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   if (notificationMode === 'phone' && (!customerPhone || typeof customerPhone !== 'string' || !customerPhone.trim())) {
     return NextResponse.json({ error: 'Numero de telephone requis pour la notification' }, { status: 400 })
@@ -56,11 +57,18 @@ export async function POST(req: NextRequest) {
   })
 
   const waitingCount = await prisma.ticket.count({ where: { agencyId, status: 'WAITING', dayDate: today } })
+  const peopleBefore = await prisma.ticket.count({
+    where: { agencyId, dayDate: today, status: 'WAITING', onHold: false, number: { lt: number } },
+  })
+  const initialPosition = Math.max(1, peopleBefore + 1)
+  await prisma.ticket.update({ where: { id: ticket.id }, data: { initialPosition } })
   const waitTime = await getAgencyWaitTime({
     agencyId,
     dayDate: today,
     waitingCount,
     openGuichets: agency?.guichets.length ?? 0,
+    targetTicketNumber: number,
+    targetService: service,
   })
   const currentTicket = await prisma.ticket.findFirst({
     where: { agencyId, dayDate: today, status: 'CALLED' },
@@ -76,6 +84,27 @@ export async function POST(req: NextRequest) {
         agencyName: agency?.name ?? 'votre agence',
       })
     : { sent: false, reason: 'guest' as const }
+
+  let hasPushToken = false
+  if (isExpoPushToken(pushToken)) {
+    await registerPushSubscription({ token: pushToken, platform: pushPlatform, ticketId: ticket.id })
+    hasPushToken = true
+  }
+
+  const pushConfirmation = hasPushToken
+    ? await notifyTicketConfirmed({
+      ticketId: ticket.id,
+      ticketNumber: number,
+      agencyId,
+      agencyName: agency?.name ?? 'votre agence',
+      service,
+      peopleAhead: peopleBefore,
+      estimatedWait: waitTime.estimatedWait,
+    })
+    : { sent: false, reason: 'no-token' as const }
+  const pushNotification = hasPushToken
+    ? await notifyApproachingTickets(agencyId, today, { skipTicketId: ticket.id })
+    : { sent: false, reason: 'no-token' as const }
 
   const io = getIO()
   if (io) {
@@ -113,5 +142,7 @@ export async function POST(req: NextRequest) {
     averagePassageMinutes: waitTime.averagePassageMinutes,
     passageSampleSize: waitTime.passageSampleSize,
     notification,
+    pushConfirmation,
+    pushNotification,
   })
 }

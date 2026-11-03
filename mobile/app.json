@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "BTK Easy",
+    "slug": "btk-easy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.btkbank.btkeasy"
+    },
+    "android": {
+      "package": "com.btkbank.btkeasy",
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-dev-client",
+      "expo-status-bar",
+      "expo-font",
+      "expo-notifications",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#061A32"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://192.168.10.92:3000",
+      "eas": {
+        "projectId": "0011550a-b818-46d3-984b-e0e6cec36fa2"
+      }
+    },
+    "owner": "ramezz"
+  }
+}

@@ -15,7 +15,7 @@ export default function TicketRedirectPage() {
   }, [code, router])
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#F3F8FC] p-6">
+    <main className="workspace-page flex min-h-screen items-center justify-center bg-[#F3F8FC] p-6">
       <div className="text-center">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-btk-blue text-sm font-black text-white">
           BTK

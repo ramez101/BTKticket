@@ -331,6 +331,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<DashboardTab>('agencies')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState('')
   const [selectedAgencyId, setSelectedAgencyId] = useState<number | null>(null)
@@ -788,14 +789,24 @@ export default function DashboardPage() {
         : tab === 'ramadan'
           ? 'Mois Ramadan et horaire applique pendant ce mois.'
       : 'Vue globale de la charge et des files.'
+  const dashboardNavigation: { key: DashboardTab; code: string; label: string; detail: string }[] = [
+    { key: 'agencies', code: 'AG', label: 'Agences', detail: `${stats.activeAgencies} agences actives` },
+    { key: 'charges', code: 'CH', label: 'Charges', detail: `${charges.length} conseillers` },
+    { key: 'holidays', code: 'JF', label: 'Jours fériés', detail: `${holidays.length} dates configurées` },
+    { key: 'service', code: 'SV', label: 'Service standard', detail: displayTimeRange(SERVICE_START_TIME, SERVICE_END_TIME) },
+    { key: 'single-session', code: 'SU', label: 'Séance unique', detail: workSchedule.activeMode === 'single-session' ? 'Mode actif' : 'Mode inactif' },
+    { key: 'ramadan', code: 'RA', label: 'Ramadan', detail: workSchedule.activeMode === 'ramadan' ? 'Mode actif' : 'Mode inactif' },
+    { key: 'stats', code: 'ST', label: 'Statistiques', detail: 'Charge et attente' },
+  ]
 
   if (!authed) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#F3F8FC] p-6">
-        <section className="w-full max-w-sm rounded-lg bg-white p-7 text-center shadow-sm ring-1 ring-blue-100">
-          <img src="/BTK.png" alt="BTK" className="mx-auto h-14 w-auto" />
-          <h1 className="mt-5 text-2xl font-black text-gray-950">Dashboard Admin</h1>
-          <p className="mt-2 text-sm text-gray-500">Gestion agences, guichets et files d'attente</p>
+        <main className="dashboard-page dashboard-login flex min-h-screen items-center justify-center p-6">
+          <section className="dashboard-login-card w-full max-w-md bg-white p-7 text-center sm:p-9">
+            <img src="/BTK.png" alt="BTK" className="mx-auto h-12 w-auto" />
+            <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-btk-blue">Espace sécurisé</p>
+            <h1 className="mt-2 text-2xl font-black text-[#102746]">Dashboard Admin</h1>
+            <p className="mt-2 text-sm text-gray-500">Gestion agences, guichets et files d'attente</p>
 
           <input
             type="password"
@@ -806,7 +817,7 @@ export default function DashboardPage() {
             onKeyDown={e => e.key === 'Enter' && handlePinLogin()}
           />
           {pinError && <p className="mt-3 text-sm font-semibold text-red-600">{pinError}</p>}
-          <button className="mt-4 w-full rounded-lg bg-btk-blue px-5 py-3 font-bold text-white transition hover:bg-btk-dark" onClick={handlePinLogin}>
+          <button className="mt-4 w-full rounded-xl bg-btk-blue px-5 py-3 font-bold text-white transition hover:bg-btk-dark focus:outline-none focus:ring-4 focus:ring-blue-100" onClick={handlePinLogin}>
             Acceder
           </button>
         </section>
@@ -815,28 +826,33 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F3F8FC]">
-      <header className="border-b border-blue-100 bg-white shadow-sm">
-        <div className="mx-auto flex min-h-[76px] w-full max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMenuOpen(true)}
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-blue-100 bg-white transition hover:bg-blue-50"
-              title="Ouvrir le menu"
-              aria-label="Ouvrir le menu"
-              aria-expanded={menuOpen}
-            >
-              <img src="/menu.png" alt="" className="h-6 w-6 object-contain" />
-            </button>
-            <img src="/BTK.png" alt="BTK" className="h-11 w-auto shrink-0" />
-            <div className="min-w-0">
-              <div className="text-lg font-black leading-tight text-gray-950">Dashboard Admin</div>
-              <div className="truncate text-xs font-medium text-gray-500">Gestion des agences BTK</div>
-            </div>
+    <main className={`dashboard-page dashboard-shell min-h-screen ${sidebarCollapsed ? 'dashboard-shell--sidebar-collapsed' : ''}`}>
+      <header className="dashboard-topbar">
+        <div className="dashboard-topbar-inner">
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            className="dashboard-topbar-menu lg:hidden"
+            title="Ouvrir le menu"
+            aria-label="Ouvrir le menu"
+            aria-expanded={menuOpen}
+          >
+            <img src="/menu.png" alt="" />
+          </button>
+          <div className="dashboard-topbar-brand lg:hidden">
+            <span className="dashboard-sidebar-brand-mark"><img src="/BTK.png" alt="BTK" /></span>
+            <span><strong>BTK Easy</strong><small>Gestion des agences BTK</small></span>
           </div>
-
-          <div className="flex items-center gap-2">
+          <label className="dashboard-topbar-search">
+            <span aria-hidden="true">⌕</span>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Rechercher une agence, un guichet, un code..."
+              aria-label="Rechercher dans le dashboard"
+            />
+          </label>
+          <div className="dashboard-topbar-actions">
             <button
               type="button"
               onClick={() => {
@@ -845,16 +861,17 @@ export default function DashboardPage() {
                 fetchHolidays()
                 fetchWorkSchedule()
               }}
-              className="rounded-lg border border-blue-100 bg-white px-4 py-2 text-sm font-bold text-btk-blue transition hover:bg-blue-50"
+              className="dashboard-topbar-refresh"
             >
-              Actualiser
+              <span aria-hidden="true">↻</span> Actualiser
             </button>
-            <button
-              type="button"
-              onClick={() => setAuthed(false)}
-              className="rounded-lg bg-btk-blue px-4 py-2 text-sm font-bold text-white transition hover:bg-btk-dark"
-            >
-              Deconnexion
+            <span className="dashboard-topbar-user-icon" aria-hidden="true">●</span>
+            <span className="dashboard-topbar-user dashboard-topbar-profile">
+              <strong>Administrateur</strong>
+              <small><i aria-hidden="true" /> En ligne</small>
+            </span>
+            <button type="button" className="dashboard-topbar-logout" onClick={() => setAuthed(false)}>
+              Déconnexion
             </button>
           </div>
         </div>
@@ -864,23 +881,19 @@ export default function DashboardPage() {
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-[1px]"
+            className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-[1px] lg:hidden"
             onClick={() => setMenuOpen(false)}
             aria-label="Fermer le menu"
           />
-          <aside className="fixed inset-y-0 left-0 z-50 flex h-dvh w-[310px] max-w-[86vw] flex-col bg-white shadow-2xl ring-1 ring-blue-100">
-            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-blue-100 p-5">
-              <div>
-                <p className="text-xs font-black uppercase text-btk-blue">Menu dashboard</p>
-                <h2 className="mt-1 text-xl font-black text-gray-950">Options</h2>
-              </div>
+          <aside className="dashboard-mobile-menu fixed inset-y-0 left-0 z-50 flex h-dvh w-[310px] max-w-[86vw] flex-col bg-white shadow-2xl ring-1 ring-blue-100 lg:hidden">
+            <div className="dashboard-sidebar-top">
               <button
                 type="button"
                 onClick={() => setMenuOpen(false)}
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-blue-100 text-sm font-black text-gray-500 transition hover:bg-blue-50"
+                className="dashboard-sidebar-toggle"
                 aria-label="Fermer le menu"
               >
-                X
+                ×
               </button>
             </div>
 
@@ -988,28 +1001,108 @@ export default function DashboardPage() {
               >
                 Actualiser
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (tab === 'charges') {
-                    setShowAddCharge(true)
-                  } else {
-                    setShowAddAgency(true)
-                  }
-                  setMenuOpen(false)
-                }}
-                className="mt-2 w-full rounded-lg bg-btk-blue px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-btk-dark"
-              >
-                {tab === 'charges' ? 'Nouveau charge' : 'Nouvelle agence'}
-              </button>
+              {(tab === 'charges' || tab === 'agencies') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tab === 'charges') setShowAddCharge(true)
+                    else setShowAddAgency(true)
+                    setMenuOpen(false)
+                  }}
+                  className="mt-2 w-full rounded-lg bg-btk-blue px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-btk-dark"
+                >
+                  {tab === 'charges' ? 'Nouveau chargé' : 'Nouvelle agence'}
+                </button>
+              )}
             </div>
           </aside>
         </>
       )}
 
-      <section className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6">
-        <div className="min-w-0">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+      <div className="dashboard-layout">
+        <aside className={`dashboard-sidebar sticky top-[76px] hidden shrink-0 flex-col px-4 py-5 lg:flex ${sidebarCollapsed ? 'dashboard-sidebar--collapsed' : ''}`}>
+          <div className="dashboard-sidebar-brand">
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(value => !value)}
+              className="dashboard-sidebar-toggle dashboard-sidebar-brand-toggle"
+              aria-label={sidebarCollapsed ? 'Agrandir le menu' : 'Reduire le menu'}
+              title={sidebarCollapsed ? 'Agrandir le menu' : 'Reduire le menu'}
+            >
+              {sidebarCollapsed ? '>' : '<'}
+            </button>
+            <span className="dashboard-sidebar-brand-mark"><img src="/BTK.png" alt="BTK" /></span>
+            <span><strong>BTK Easy</strong><small>Gestion des agences BTK</small></span>
+          </div>
+
+          <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto" aria-label="Navigation dashboard">
+            <p className="dashboard-nav-section-label">Gestion</p>
+            {dashboardNavigation.filter(item => item.key !== 'stats').map(item => (
+              <DashboardMenuButton
+                key={item.key}
+                active={tab === item.key}
+                code={item.code}
+                label={item.label}
+                detail={item.detail}
+                onClick={() => {
+                  setTab(item.key)
+                  if (item.key === 'agencies' || item.key === 'charges' || item.key === 'service' || item.key === 'single-session' || item.key === 'ramadan') {
+                    setSelectedAgencyId(null)
+                  }
+                }}
+              />
+            ))}
+            <p className="dashboard-nav-section-label dashboard-nav-section-label--stats">Statistiques</p>
+            {dashboardNavigation.filter(item => item.key === 'stats').map(item => (
+              <DashboardMenuButton
+                key={item.key}
+                active={tab === item.key}
+                code={item.code}
+                label={item.label}
+                detail={item.detail}
+                onClick={() => setTab(item.key)}
+              />
+            ))}
+            <DashboardMenuButton
+              active={false}
+              code="DC"
+              label="Dashboard chargé"
+              detail="Connexion conseiller"
+              onClick={() => router.push('/charge-dashboard')}
+            />
+          </nav>
+          <div className="mt-4 shrink-0 border-t border-[#e8edf4] pt-4">
+            {(tab === 'charges' || tab === 'agencies') ? (
+              <button
+                type="button"
+                onClick={() => tab === 'charges' ? setShowAddCharge(true) : setShowAddAgency(true)}
+                className="w-full rounded-xl bg-btk-blue px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-btk-dark focus:outline-none focus:ring-4 focus:ring-blue-100"
+              >
+                {tab === 'charges' ? '+ Ajouter un chargé' : '+ Ajouter une agence'}
+              </button>
+            ) : (
+              <div className="rounded-xl bg-[#f4f8fc] px-3 py-3 text-center text-xs font-semibold text-slate-500">
+                Paramètres BTK Easy
+              </div>
+            )}
+            <p className="dashboard-sidebar-footer mt-3 text-center text-[10px] font-medium text-slate-400">BTK Easy · Administration</p>
+          </div>
+        </aside>
+
+      <section className="dashboard-content">
+        <div className="mx-auto min-w-0 max-w-none">
+            <div className="dashboard-page-intro">
+              <div>
+                <div className="dashboard-breadcrumb"><span aria-hidden="true">⌂</span> Accueil</div>
+                <h1>{tab === 'agencies' ? 'Tableau de bord' : tabTitle}</h1>
+                <p>{tab === 'agencies' ? 'Vue d’ensemble de la gestion des agences BTK' : tabDescription}</p>
+              </div>
+              <div className="dashboard-date">
+                <strong>Aujourd’hui</strong>
+                <span>Suivi en temps réel</span>
+              </div>
+            </div>
+            <div className="dashboard-kpi-grid">
               <StatCard label="Agences" value={stats.totalAgencies} detail={`${stats.activeAgencies} actives`} tone="blue" />
               <StatCard label="Inactives" value={stats.inactiveAgencies} detail="agences fermees" tone="gray" />
               <StatCard label="Charges" value={stats.totalCharges} detail={`${stats.activeCharges} actifs`} tone="indigo" />
@@ -1019,33 +1112,40 @@ export default function DashboardPage() {
               <StatCard label="Attente" value={`~${stats.estimatedWait}m`} detail="estimation totale" tone="red" />
             </div>
 
-            <div className="mt-5 rounded-lg bg-white p-4 shadow-sm ring-1 ring-blue-100">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="dashboard-toolbar mt-5 p-5 sm:p-6">
+              <div className="dashboard-toolbar-heading">
                 <div>
-                  <p className="text-sm font-semibold uppercase text-btk-blue">Administration</p>
-                  <h1 className="mt-1 text-2xl font-black text-gray-950">{tabTitle}</h1>
-                  <p className="mt-1 text-sm font-medium text-gray-500">{tabDescription}</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-btk-blue">Administration</p>
+                  <h1 className="mt-1 text-2xl font-black tracking-tight text-[#102746] sm:text-3xl">{tabTitle}</h1>
+                  <p className="mt-1 text-sm font-medium text-slate-500">{tabDescription}</p>
                 </div>
 
-                {(tab === 'agencies' || tab === 'charges' || tab === 'stats') && !isAgencyDetailsOpen && (
-                  <input
-                    className="btk-input h-11 min-w-[240px] bg-white"
-                    placeholder={tab === 'charges' ? 'Recherche charge, agence, code' : 'Recherche agence, ville, code'}
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                  />
-                )}
+                <div className="dashboard-toolbar-controls">
+                  {(tab === 'agencies' || tab === 'charges' || tab === 'stats') && !isAgencyDetailsOpen && (
+                    <input
+                      className="btk-input h-11 min-w-[240px] rounded-xl bg-[#f8fafc]"
+                      placeholder={tab === 'charges' ? 'Recherche charge, agence, code' : 'Recherche agence, ville, code'}
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                    />
+                  )}
+                  {tab === 'agencies' && !isAgencyDetailsOpen && (
+                    <button type="button" className="dashboard-add-button" onClick={() => setShowAddAgency(true)}>
+                      <span aria-hidden="true">＋</span> Ajouter une agence
+                    </button>
+                  )}
+                </div>
               </div>
 
               {notice && (
-                <div className="mt-4 rounded-lg bg-green-50 px-4 py-3 text-sm font-semibold text-green-700 ring-1 ring-green-100">
+                <div className="dashboard-notice mt-4 px-4 py-3 text-sm font-semibold">
                   {notice}
                 </div>
               )}
             </div>
 
             {loading ? (
-              <div className="mt-6 rounded-lg bg-white p-10 text-center text-sm font-semibold text-gray-400 shadow-sm ring-1 ring-blue-100">
+              <div className="mt-6 rounded-2xl border border-[#e2eaf3] bg-white p-10 text-center text-sm font-semibold text-gray-400 shadow-sm">
                 Chargement...
               </div>
             ) : tab === 'agencies' ? (
@@ -1066,7 +1166,7 @@ export default function DashboardPage() {
                   Aucune agence trouvee.
                 </div>
               ) : (
-                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredAgencies.map(agency => (
                     <AgencyPanel
                       key={agency.id}
@@ -1121,6 +1221,7 @@ export default function DashboardPage() {
             )}
           </div>
       </section>
+      </div>
 
       {showAddAgency && (
         <Modal title="Nouvelle agence" onClose={() => setShowAddAgency(false)}>
@@ -1278,20 +1379,21 @@ function DashboardMenuButton({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className={`grid grid-cols-[44px_1fr] items-center gap-3 rounded-lg px-3 py-3 text-left transition ${
+      data-active={active}
+      className={`dashboard-nav-item grid w-full grid-cols-[38px_1fr] items-center gap-3 px-2.5 py-2.5 text-left ${
         active
-          ? 'bg-btk-blue text-white shadow-sm'
-          : 'bg-white text-gray-700 ring-1 ring-blue-50 hover:bg-blue-50 hover:text-btk-blue'
+          ? 'bg-[#eaf3fb] text-[#003a66] ring-1 ring-[#cfe1f1]'
+          : 'bg-transparent text-gray-700 hover:bg-[#f4f8fc] hover:text-btk-blue'
       }`}
     >
-      <span className={`flex h-11 w-11 items-center justify-center rounded-lg text-xs font-black ${
-        active ? 'bg-white text-btk-blue' : 'bg-blue-50 text-btk-blue'
+      <span className={`dashboard-nav-badge flex h-9 w-9 items-center justify-center text-[10px] font-black ${
+        active ? 'bg-btk-blue text-white' : 'bg-[#eef4fa] text-btk-blue'
       }`}>
         {code}
       </span>
       <span className="min-w-0">
         <span className="block truncate text-sm font-black">{label}</span>
-        <span className={`mt-0.5 block truncate text-xs font-medium ${active ? 'text-blue-100' : 'text-gray-400'}`}>
+        <span className={`mt-0.5 block truncate text-[10px] font-medium ${active ? 'text-[#42617d]' : 'text-gray-400'}`}>
           {detail}
         </span>
       </span>
@@ -1324,15 +1426,15 @@ function AgencyPanel({
           onSelect()
         }
       }}
-      className="cursor-pointer rounded-lg bg-white shadow-sm outline-none ring-1 ring-blue-100 transition hover:-translate-y-0.5 hover:shadow-md hover:ring-btk-blue focus:ring-2 focus:ring-btk-blue"
+      className="dashboard-agency-card cursor-pointer outline-none focus:ring-2 focus:ring-btk-blue"
     >
       <div className="p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-base font-black text-btk-blue">
+        <div className="dashboard-agency-header flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="dashboard-agency-main flex min-w-0 items-start gap-4">
+            <div className="dashboard-agency-code flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-base font-black text-btk-blue">
               {agency.code}
             </div>
-            <div className="min-w-0">
+            <div className="dashboard-agency-content min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="truncate text-xl font-black text-gray-950">{agency.name}</h2>
                 <span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${agency.isActive ? 'bg-green-50 text-green-700 ring-green-200' : 'bg-gray-50 text-gray-500 ring-gray-200'}`}>
@@ -1342,21 +1444,21 @@ function AgencyPanel({
                   {load.label}
                 </span>
               </div>
-              <p className="mt-1 text-sm font-medium text-gray-500">{agency.city}</p>
+              <p className="mt-1 text-sm font-medium text-gray-500">{agency.city === agency.name ? 'Agence principale' : agency.city}</p>
               <p className="mt-2 text-xs font-bold uppercase text-btk-blue">
                 Cliquez ici
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="dashboard-agency-actions flex flex-wrap gap-2">
             <ActionButton onClick={onToggleAgency} tone={agency.isActive ? 'orange' : 'green'}>
               {agency.isActive ? 'Desactiver' : 'Activer'}
             </ActionButton>
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-3 gap-2">
+        <div className="dashboard-agency-metrics mt-5 grid grid-cols-3 gap-2">
           <MiniMetric label="En attente" value={stats.waiting} tone="blue" />
           <MiniMetric label="Guichets" value={`${openGuichets}/${guichets.length}`} tone="green" />
           <MiniMetric label="Attente" value={`~${stats.estimatedWait}m`} tone="orange" />
@@ -1700,26 +1802,26 @@ function ChargesView({
   const agenciesWithCharges = new Set(charges.map(charge => charge.agencyId)).size
 
   return (
-    <div className="mt-5 grid gap-4 lg:grid-cols-[360px_1fr]">
+    <div className="charges-view mt-5 grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
       <aside className="space-y-4">
-        <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
-          <p className="text-sm font-black uppercase text-btk-blue">Config charge</p>
-          <h2 className="mt-1 text-xl font-black text-gray-950">Charges clients</h2>
+        <section className="charges-intro rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+          <p className="text-sm font-black uppercase text-btk-blue">Configuration</p>
+          <h2 className="mt-1 text-xl font-black text-gray-950">Chargés clients</h2>
           <p className="mt-2 text-sm leading-6 text-gray-500">
-            Ajoutez, modifiez, supprimez ou deplacez un charge vers une autre agence.
+            Ajoutez, modifiez, supprimez ou affectez un chargé à une autre agence.
           </p>
           <button
             type="button"
             onClick={onAdd}
             className="mt-5 w-full rounded-lg bg-btk-blue px-5 py-3 font-black text-white shadow-sm transition hover:bg-btk-dark"
           >
-            Ajouter charge
+            Ajouter un chargé
           </button>
         </section>
 
-        <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
-          <h3 className="text-sm font-black uppercase text-gray-500">Synthese</h3>
-          <div className="mt-4 grid gap-2">
+        <section className="charges-summary rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+          <h3 className="text-sm font-black uppercase text-gray-500">Vue d’ensemble</h3>
+          <div className="charges-summary-grid mt-4 grid gap-2">
             <MiniMetric label="Charges" value={charges.length} tone="blue" />
             <MiniMetric label="Actifs" value={activeCharges} tone="green" />
             <MiniMetric label="Agences" value={`${agenciesWithCharges}/${agencies.length}`} tone="orange" />
@@ -1727,11 +1829,11 @@ function ChargesView({
         </section>
       </aside>
 
-      <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
-        <div className="mb-4 flex items-center justify-between gap-4">
+      <section className="charges-list-panel rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
+        <div className="charges-list-header mb-4 flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-black text-gray-950">Liste des charges</h2>
-            <p className="mt-1 text-sm text-gray-500">Le nom de l'agence est lie automatiquement par code agence.</p>
+            <h2 className="text-xl font-black text-gray-950">Liste des chargés</h2>
+            <p className="mt-1 text-sm text-gray-500">Chaque chargé est rattaché automatiquement à son agence.</p>
           </div>
           <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-btk-blue ring-1 ring-blue-100">
             {charges.length}
@@ -1743,10 +1845,10 @@ function ChargesView({
             Aucun charge trouve.
           </div>
         ) : (
-          <div className="divide-y divide-blue-50 rounded-lg border border-blue-50">
+          <div className="charges-list divide-y divide-blue-50 rounded-lg border border-blue-50">
             {charges.map(charge => (
-              <div key={charge.id} className="grid gap-3 px-4 py-4 xl:grid-cols-[1fr_auto] xl:items-center">
-                <div className="min-w-0">
+              <div key={charge.id} className="charges-row grid gap-3 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                <div className="charges-identity min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-btk-blue">{charge.code}</span>
                     <h3 className="truncate text-lg font-black text-gray-950">{charge.name}</h3>
@@ -1756,7 +1858,7 @@ function ChargesView({
                       {charge.isActive ? 'Actif' : 'Inactif'}
                     </span>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-gray-500">
+                  <div className="charges-meta mt-2 flex flex-wrap gap-2 text-xs font-bold text-gray-500">
                     <span>{charge.agencyCode} - {charge.agencyName}</span>
                     <span className="text-gray-300">|</span>
                     <span>{charge.city}</span>
@@ -1769,7 +1871,7 @@ function ChargesView({
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="charges-actions flex flex-wrap gap-2">
                   <ActionButton onClick={() => onEdit(charge)}>Modifier</ActionButton>
                   <ActionButton onClick={() => onCalendar(charge)} tone="green">Calendrier</ActionButton>
                   <ActionButton onClick={() => onToggle(charge)} tone={charge.isActive ? 'orange' : 'green'}>
@@ -2324,12 +2426,15 @@ function StatCard({ label, value, detail, tone }: { label: string; value: ReactN
   }
 
   return (
-    <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-blue-100">
-      <div className="text-xs font-black uppercase text-gray-400">{label}</div>
-      <div className={`mt-3 inline-flex min-h-12 min-w-16 items-center justify-center rounded-lg px-3 text-2xl font-black tabular-nums ring-1 ${tones[tone]}`}>
+    <div className="dashboard-kpi-card group p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="truncate text-xs font-bold uppercase tracking-wide text-slate-500">{label}</div>
+        <span className="dashboard-kpi-icon" aria-hidden="true">{label.slice(0, 2).toUpperCase()}</span>
+      </div>
+      <div className={`mt-4 text-3xl font-black tabular-nums tracking-tight ${tones[tone].split(' ')[1]}`}>
         {value}
       </div>
-      <div className="mt-2 text-xs font-medium text-gray-500">{detail}</div>
+      <div className="mt-1 truncate text-xs font-medium text-slate-500">{detail}</div>
     </div>
   )
 }
@@ -2342,7 +2447,7 @@ function MiniMetric({ label, value, tone }: { label: string; value: ReactNode; t
   }
 
   return (
-    <div className={`rounded-lg px-3 py-2 ${tones[tone]}`}>
+    <div className={`rounded-[var(--radius-md)] border border-slate-100 px-3 py-2 ${tones[tone]}`}>
       <div className="text-[10px] font-black uppercase opacity-70">{label}</div>
       <div className="mt-1 text-lg font-black tabular-nums">{value}</div>
     </div>
@@ -2364,7 +2469,7 @@ function ActionButton({ children, onClick, tone = 'blue' }: { children: ReactNod
         event.stopPropagation()
         onClick()
       }}
-      className={`rounded-lg border bg-white px-3 py-2 text-xs font-bold transition ${tones[tone]}`}
+      className={`rounded-[var(--radius-sm)] border bg-white px-3 py-2 text-xs font-bold transition hover:shadow-sm ${tones[tone]}`}
     >
       {children}
     </button>
@@ -2374,7 +2479,7 @@ function ActionButton({ children, onClick, tone = 'blue' }: { children: ReactNod
 function Modal({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
-      <section className={`w-full rounded-lg bg-white p-6 shadow-2xl ring-1 ring-blue-100 ${wide ? 'max-w-4xl' : 'max-w-md'}`}>
+      <section className={`dashboard-modal-panel w-full bg-white p-6 ${wide ? 'max-w-4xl' : 'max-w-md'}`}>
         <div className="mb-5 flex items-center justify-between gap-4">
           <h2 className="text-lg font-black text-gray-950">{title}</h2>
           <button

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getIO } from '@/lib/socket-server'
 import { getServiceStatus, todayDate } from '@/lib/hours'
 import { getAgencyWaitTime } from '@/lib/wait-time'
+import { notifyApproachingTickets, notifyCalledTicket, notifyFinishedTicket } from '@/lib/push'
 
 export async function POST(req: NextRequest) {
   const serviceStatus = await getServiceStatus()
@@ -55,6 +56,10 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    const agency = await prisma.agency.findUnique({ where: { id: agencyId }, select: { name: true } })
+    await notifyCalledTicket(called.id, agency?.name ?? 'BTK', guichetLabel || guichet.label)
+    await notifyApproachingTickets(agencyId, today)
+
     return NextResponse.json({
       called,
       waitingCount,
@@ -65,12 +70,21 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  const finishingTicket = action === 'hold' ? null : await prisma.ticket.findFirst({
+    where: { agencyId, guichetId, status: 'CALLED', dayDate: today },
+    select: { id: true },
+  })
+
   await prisma.ticket.updateMany({
     where: { agencyId, guichetId, status: 'CALLED', dayDate: today },
     data: action === 'hold'
       ? { status: 'WAITING', guichetId: null, calledAt: null, onHold: true }
       : { status: action === 'absent' ? 'ABSENT' : 'SERVED', servedAt: new Date(), onHold: false },
   })
+
+  if (finishingTicket && (action === 'absent' || action === 'next')) {
+    await notifyFinishedTicket(finishingTicket.id, action === 'absent' ? 'ABSENT' : 'SERVED')
+  }
 
   const next = await prisma.ticket.findFirst({
     where: { agencyId, status: 'WAITING', dayDate: today },
@@ -139,6 +153,10 @@ export async function POST(req: NextRequest) {
       servedCount,
     })
   }
+
+  const agency = await prisma.agency.findUnique({ where: { id: agencyId }, select: { name: true } })
+  await notifyCalledTicket(called.id, agency?.name ?? 'BTK', guichetLabel || guichet.label)
+  await notifyApproachingTickets(agencyId, today)
 
   return NextResponse.json({
     called,

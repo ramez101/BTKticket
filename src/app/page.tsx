@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import BTKHeader from '@/components/shared/BTKHeader'
 
 type ActiveHours = {
   label: string
@@ -52,7 +53,7 @@ export default function Home() {
   useEffect(() => {
     const checkOpenStatus = async () => {
       try {
-        const status = await fetch('/api/service-status').then(r => r.json())
+        const status = await fetch('/api/service-status', { cache: 'no-store' }).then(r => r.json())
         setOpenStatus({
           open: Boolean(status.open),
           message: status.message || 'Service indisponible',
@@ -137,26 +138,18 @@ export default function Home() {
   return (
     <main className="flex min-h-screen min-w-full overflow-x-hidden overflow-y-auto bg-gradient-to-br from-white via-[#edf6ff] to-[#d8ebff] text-[#0065a1]">
       <div className="flex min-h-screen w-full flex-1 flex-col">
-      <header className="shrink-0 border-b border-[#dbeaf8] bg-white shadow-[0_20px_50px_-30px_rgba(0,0,0,0.09)]">
-        <div className="mx-auto flex min-h-[72px] w-full max-w-[1500px] items-center justify-between gap-3 px-4 sm:px-6 lg:min-h-[80px] lg:px-8">
-          <Link href="/" className="flex min-w-0 items-center gap-3">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-blue-100 bg-white shadow-sm">
-              <img src="/BTK.png" alt="BTK" className="h-8 w-auto" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-lg font-black leading-tight text-slate-950 sm:text-xl">BTK Easy</span>
-              <span className="block truncate text-xs font-semibold text-slate-500 sm:text-sm">Optimisez chaque visite.</span>
-            </span>
-          </Link>
-
-          <nav className="hidden items-center gap-3 rounded-full bg-white/90 p-1 shadow-sm ring-1 ring-[#dbeaf8] lg:flex">
+      <BTKHeader
+        subtitle="Optimisez chaque visite."
+        right={(
+          <>
+            <nav className="hidden items-center gap-3 rounded-full bg-white/90 p-1 shadow-sm ring-1 ring-[#dbeaf8] lg:flex">
             <a
               href="https://www.btkbank.com/"
               target="_blank"
               rel="noreferrer"
               className="rounded-full border border-[#0065a1] bg-white px-4 py-2 text-sm font-black text-[#0065a1] transition hover:bg-[#eaf5ff] hover:text-[#003a66]"
             >
-              A Propos
+              À propos
             </a>
             <a
               href="https://www.btkbank.com/site/fr/contact.php?id_article=38&objet=1"
@@ -171,11 +164,10 @@ export default function Home() {
               onClick={() => setShowHours(true)}
               className="rounded-full border border-[#0065a1] bg-white px-4 py-2 text-sm font-black text-[#0065a1] transition hover:bg-[#eaf5ff] hover:text-[#003a66]"
             >
-              Horaire
+              Horaires
             </button>
-          </nav>
+            </nav>
 
-          <div className="flex shrink-0 items-center gap-2">
             <span className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-black shadow-sm ring-1 sm:px-4 sm:py-2.5 sm:text-sm ${
               serviceOpen
                 ? 'bg-green-50 text-green-700 ring-green-200'
@@ -186,7 +178,7 @@ export default function Home() {
               <span className={`h-2.5 w-2.5 rounded-full ${
                 serviceOpen ? 'bg-green-500' : serviceClosed ? 'bg-red-500' : 'bg-slate-400'
               }`} />
-              {serviceOpen ? 'Ouvert' : serviceClosed ? 'Fermé' : 'Vérification'}
+              {serviceOpen ? 'Service ouvert' : serviceClosed ? 'Service fermé' : 'Vérification du service'}
             </span>
             <button
               type="button"
@@ -198,9 +190,9 @@ export default function Home() {
             >
               <img src="/menu.png" alt="Menu" className="h-5 w-5 object-contain" />
             </button>
-          </div>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       {mobileMenuOpen && (
         <>
@@ -236,7 +228,7 @@ export default function Home() {
                 }}
                 className="flex w-full items-center justify-between rounded-3xl border border-[#dbeaf8] bg-[#f4fbff] px-5 py-4 text-left text-sm font-black text-[#0065a1] transition hover:bg-[#eaf5ff]"
               >
-                <span>Horaire</span>
+                <span>Horaires</span>
                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-[#e4f2ff] text-[#0065a1]">›</span>
               </button>
               <a
@@ -245,7 +237,7 @@ export default function Home() {
                 rel="noreferrer"
                 className="flex w-full items-center justify-between rounded-3xl border border-[#dbeaf8] bg-[#f4fbff] px-5 py-4 text-left text-sm font-black text-[#0065a1] transition hover:bg-[#eaf5ff]"
               >
-                <span>A Propos</span>
+                <span>À propos</span>
                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-[#e4f2ff] text-[#0065a1]">›</span>
               </a>
               <a
@@ -264,62 +256,201 @@ export default function Home() {
       )}
 
       <section className="relative min-h-0 flex-1 overflow-hidden bg-gradient-to-br from-white via-[#edf7ff] to-[#e3f0ff] text-[#0065a1]">
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="pointer-events-none absolute -right-24 top-10 h-72 w-72 rounded-full bg-[#0065a1]/10 blur-3xl" />
-          <div className="pointer-events-none absolute left-10 top-1/2 h-64 w-64 -translate-y-1/2 rounded-full bg-[#0065a1]/10 blur-3xl" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#0065a1]/12 via-transparent to-transparent" />
-        </div>
+        <div aria-hidden="true" className="pointer-events-none absolute -right-32 top-0 h-[32rem] w-[32rem] rounded-full bg-[#0065a1]/10 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-48 -left-24 h-[30rem] w-[30rem] rounded-full bg-[#1978be]/10 blur-3xl" />
 
-        <div className="relative mx-auto flex min-h-[calc(86vh-72px)] max-w-[1500px] items-center px-4 py-10 sm:px-6 lg:px-8">
-          <div className="grid w-full gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
-            <div className="max-w-2xl">
-              <h1 className="mt-8 text-5xl font-black leading-[1.02] tracking-[-0.03em] text-[#003a66] sm:text-6xl lg:text-[4.6rem]">
-                Moins d'attente. Plus de Satisfaction.
-              </h1>
+        <div className="relative mx-auto grid min-h-[min(760px,calc(100dvh-140px))] w-full max-w-[1440px] items-center gap-8 px-5 py-12 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-4 lg:px-12 lg:py-10">
+          <div className="relative z-10 max-w-2xl">
+            <h1 className="mt-6 max-w-[700px] text-[2.75rem] font-black leading-[1.04] tracking-[-0.045em] text-[#003a66] sm:text-6xl lg:text-[4.5rem]">
+              Moins d&apos;attente.
+              <span className="mt-1 block text-[#0065a1]">Plus de temps pour vous.</span>
+            </h1>
+            <p className="mt-5 max-w-xl text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
+              Préparez votre visite à l&apos;agence en quelques instants : prenez un ticket, suivez votre tour ou réservez un rendez-vous avec votre conseiller.
+            </p>
 
-              <div className="mt-8 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
-                <div className="flex w-full gap-3">
-                  <Link
-                    href="/client"
-                    prefetch
-                    onMouseEnter={() => router.prefetch('/client')}
-                    onFocus={() => router.prefetch('/client')}
-                    onTouchStart={() => router.prefetch('/client')}
-                    className="inline-flex basis-[50%] min-w-0 items-center justify-center rounded-full border border-[#0065a1] bg-white px-5 py-4 text-base font-black text-[#0065a1] transition duration-150 hover:bg-[#f4fbff] active:scale-[0.98] sm:basis-auto sm:min-w-[170px] lg:px-9 lg:py-5 lg:text-lg"
-                  >
-                    Prendre Ticket
-                  </Link>
-                  <Link
-                    href="/ecran"
-                    className="inline-flex basis-[50%] min-w-0 items-center justify-center rounded-full border border-[#0065a1] bg-white px-5 py-4 text-base font-black text-[#0065a1] transition hover:bg-[#f4fbff] sm:basis-auto sm:min-w-[170px] lg:px-9 lg:py-5 lg:text-lg"
-                  >
-                    Suivre votre tour
-                  </Link>
+            <div className="mt-8 grid max-w-[620px] gap-3 sm:grid-cols-2">
+              <Link
+                href="/client"
+                prefetch
+                onMouseEnter={() => router.prefetch('/client')}
+                onFocus={() => router.prefetch('/client')}
+                onTouchStart={() => router.prefetch('/client')}
+                className="group inline-flex min-h-[58px] items-center justify-between gap-4 rounded-2xl bg-[#0065a1] px-5 py-4 text-sm font-bold text-white shadow-[0_16px_35px_-18px_rgba(0,101,161,0.65)] transition hover:-translate-y-0.5 hover:bg-[#003a66] focus:outline-none focus:ring-4 focus:ring-[#0065a1]/20 sm:text-base"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path d="M6 3.75h12a2 2 0 0 1 2 2v14.5a.75.75 0 0 1-1.1.66L12 17.25l-6.9 3.66a.75.75 0 0 1-1.1-.66V5.75a2 2 0 0 1 2-2Z" />
+                      <path d="M8 8h8M8 11.5h5" />
+                    </svg>
+                  </span>
+                  Prendre un ticket
+                </span>
+                <span className="text-lg transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+              </Link>
+              <Link
+                href="/rdv"
+                prefetch
+                onMouseEnter={() => router.prefetch('/rdv')}
+                onFocus={() => router.prefetch('/rdv')}
+                onTouchStart={() => router.prefetch('/rdv')}
+                className="group inline-flex min-h-[58px] items-center justify-between gap-4 rounded-2xl border border-[#c5dced] bg-white/85 px-5 py-4 text-sm font-bold text-[#003a66] shadow-sm transition hover:-translate-y-0.5 hover:border-[#0065a1] hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#0065a1]/15 sm:text-base"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#e7f2fb] text-[#0065a1]">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <rect x="3.75" y="5.5" width="16.5" height="15" rx="2" />
+                      <path d="M8 3.75v3.5m8-3.5v3.5M4 9.5h16m-11.5 4h3m-3 3.5h7" />
+                    </svg>
+                  </span>
+                  Prendre rendez-vous
+                </span>
+                <span className="text-lg text-[#0065a1] transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+              </Link>
+              <Link
+                href="/ecran"
+                className="group inline-flex min-h-[52px] items-center gap-3 rounded-2xl px-2 py-2 text-sm font-semibold text-[#0065a1] transition hover:text-[#003a66] focus:outline-none focus:underline sm:col-span-2"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#cfe4f7] bg-white/70">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                    <rect x="3.5" y="4.5" width="17" height="12.5" rx="2" />
+                    <path d="M8 21h8m-4-4v4m-5-9 3-3 2 2 4-4m0 0v3m0-3h-3" />
+                  </svg>
+                </span>
+                Suivre votre tour en direct
+                <span className="transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+              </Link>
+            </div>
+          </div>
+
+          <div className="relative mx-auto flex h-[430px] w-full max-w-[560px] items-center justify-center sm:h-[540px] lg:h-[620px]" aria-label="Illustration animée des services BTK Easy">
+            <div aria-hidden="true" className="absolute h-[270px] w-[270px] rounded-full border border-[#9bc8e8]/50 sm:h-[390px] sm:w-[390px]" />
+            <div aria-hidden="true" className="absolute h-[220px] w-[220px] rounded-full bg-gradient-to-br from-white to-[#d6eafb] shadow-[0_30px_90px_-40px_rgba(0,101,161,0.35)] sm:h-[330px] sm:w-[330px]" />
+            <div aria-hidden="true" className="absolute h-[300px] w-[300px] rounded-full border border-dashed border-[#9bc8e8]/70 sm:h-[460px] sm:w-[460px]" />
+
+            <div className="home-phone-float relative z-10 h-[350px] w-[190px] rounded-[34px] border-[7px] border-[#102746] bg-[#102746] p-[5px] shadow-[0_35px_80px_-25px_rgba(0,58,102,0.48)] sm:h-[440px] sm:w-[236px] sm:rounded-[42px] sm:border-[8px]">
+              <div className="relative h-full overflow-hidden rounded-[26px] bg-[#f7fbff] px-3.5 pb-4 pt-3 sm:rounded-[32px] sm:px-4 sm:pt-4">
+                <div className="absolute left-1/2 top-0 z-20 h-[17px] w-[72px] -translate-x-1/2 rounded-b-xl bg-[#102746] sm:h-[20px] sm:w-[88px]" />
+                <div className="flex items-center justify-between text-[8px] font-bold text-[#102746] sm:text-[9px]">
+                  <span>9:41</span>
+                  <span className="flex items-center gap-1.5" aria-hidden="true">
+                    <span className="h-2 w-3 rounded-sm border border-[#102746]" />
+                    <span className="h-2 w-2 rounded-full bg-[#102746]" />
+                  </span>
                 </div>
-                <div className="flex w-full justify-start lg:w-auto">
-                  <Link
-                    href="/rdv"
-                    prefetch
-                    onMouseEnter={() => router.prefetch('/rdv')}
-                    onFocus={() => router.prefetch('/rdv')}
-                    onTouchStart={() => router.prefetch('/rdv')}
-                    className="inline-flex w-[50%] min-w-[160px] items-center justify-center rounded-full bg-[#0065a1] px-7 py-4 text-base font-black text-white shadow-[0_22px_55px_-30px_rgba(0,101,161,0.45)] transition duration-150 hover:bg-[#005583] active:scale-[0.98] lg:w-auto lg:px-11 lg:py-5 lg:text-lg"
-                  >
-                    Prendre RDV
-                  </Link>
+                <div className="mt-5 flex items-center gap-2.5 border-b border-[#e4edf5] pb-3 sm:mt-7">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0065a1] text-[10px] font-black text-white sm:h-9 sm:w-9">BTK</span>
+                  <span>
+                    <span className="block text-[11px] font-black text-[#102746] sm:text-xs">BTK Easy</span>
+                    <span className="block text-[8px] font-medium text-slate-500 sm:text-[9px]">Bonjour</span>
+                  </span>
+                  <span className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-white text-[#0065a1] shadow-sm" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12h4" />
+                    </svg>
+                  </span>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-[10px] font-black text-[#102746] sm:text-xs">Vos services</span>
+                  <span className="text-[8px] font-semibold text-[#0065a1] sm:text-[9px]">Tout voir</span>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-[#dceaf6] bg-white p-2 shadow-sm">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#e7f2fb] text-[#0065a1] sm:h-7 sm:w-7">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                        <path d="M6 3.75h12a2 2 0 0 1 2 2v14.5a.75.75 0 0 1-1.1.66L12 17.25l-6.9 3.66a.75.75 0 0 1-1.1-.66V5.75a2 2 0 0 1 2-2Z" />
+                        <path d="M8 8h8m-8 3.5h5" />
+                      </svg>
+                    </span>
+                    <span className="mt-1.5 block text-[8px] font-bold text-[#102746] sm:text-[9px]">Ticket en ligne</span>
+                    <span className="block text-[7px] text-slate-500 sm:text-[8px]">Sans attendre</span>
+                  </div>
+                  <div className="rounded-xl border border-[#dceaf6] bg-white p-2 shadow-sm">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#e7f2fb] text-[#0065a1] sm:h-7 sm:w-7">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                        <rect x="3.75" y="5.5" width="16.5" height="15" rx="2" />
+                        <path d="M8 3.75v3.5m8-3.5v3.5M4 9.5h16m-11.5 4h3" />
+                      </svg>
+                    </span>
+                    <span className="mt-1.5 block text-[8px] font-bold text-[#102746] sm:text-[9px]">Rendez-vous</span>
+                    <span className="block text-[7px] text-slate-500 sm:text-[8px]">À votre agenda</span>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-xl bg-[#0065a1] p-3 text-white shadow-md sm:p-3.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[8px] font-semibold text-blue-100 sm:text-[9px]">VOTRE TICKET</span>
+                    <span className="rounded-full bg-white/15 px-2 py-1 text-[7px] font-bold sm:text-[8px]">EN ATTENTE</span>
+                  </div>
+                  <div className="mt-1 flex items-end justify-between">
+                    <span className="text-3xl font-black leading-none sm:text-4xl">A024</span>
+                    <span className="text-right text-[8px] font-medium text-blue-100 sm:text-[9px]">Centrale<br />~ 8 min</span>
+                  </div>
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/20">
+                    <div className="home-progress-bar h-full w-2/3 rounded-full bg-white" />
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-xl border border-[#dceaf6] bg-white p-3 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#e7f2fb] text-[#0065a1]">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                        <path d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z" />
+                        <circle cx="12" cy="10" r="2.3" />
+                      </svg>
+                    </span>
+                    <span>
+                      <span className="block text-[8px] font-bold text-[#102746] sm:text-[9px]">Agence la plus proche</span>
+                      <span className="block text-[7px] text-slate-500 sm:text-[8px]">Centrale · 1,2 km</span>
+                    </span>
+                    <span className="ml-auto text-[8px] font-bold text-[#0065a1]">›</span>
+                  </div>
+                </div>
+
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-around border-t border-[#e4edf5] bg-white/95 px-2 py-2.5">
+                  <span className="flex flex-col items-center gap-1 text-[#0065a1]">
+                    <span className="h-1 w-4 rounded-full bg-[#0065a1]" />
+                    <span className="text-[7px] font-bold">Accueil</span>
+                  </span>
+                  <span className="flex flex-col items-center gap-1 text-slate-400">
+                    <span className="h-1 w-4 rounded-full bg-slate-200" />
+                    <span className="text-[7px] font-medium">Tickets</span>
+                  </span>
+                  <span className="flex flex-col items-center gap-1 text-slate-400">
+                    <span className="h-1 w-4 rounded-full bg-slate-200" />
+                    <span className="text-[7px] font-medium">Profil</span>
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="relative flex items-center justify-center">
-              <div className="relative overflow-hidden rounded-[40px] border border-[#dbeaf8] bg-gradient-to-br from-white to-[#ebf4ff] p-4 shadow-[0_40px_120px_-48px_rgba(0,101,161,0.2)] backdrop-blur-xl">
-                <img
-                  src="/rdv.png"
-                  alt="Planification de rendez-vous BTK"
-                  className="w-full max-w-[520px] rounded-[32px] object-cover shadow-2xl"
-                />
-                <div className="pointer-events-none absolute -bottom-6 left-4 h-20 w-20 rounded-full bg-[#0065a1]/10 blur-2xl" />
-              </div>
+            <div className="home-notice-float absolute left-0 top-[21%] z-20 flex items-center gap-2.5 rounded-2xl border border-[#dceaf6] bg-white px-3 py-2.5 shadow-[0_18px_40px_-20px_rgba(0,58,102,0.35)] sm:left-1 sm:px-4 sm:py-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#e7f2fb] text-[#0065a1]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <rect x="3.75" y="5.5" width="16.5" height="15" rx="2" />
+                  <path d="M8 3.75v3.5m8-3.5v3.5M4 9.5h16m-11.5 4h3" />
+                </svg>
+              </span>
+              <span>
+                <span className="block text-[9px] font-bold text-[#102746] sm:text-[10px]">Rendez-vous confirmé</span>
+                <span className="block text-[8px] text-slate-500 sm:text-[9px]">Demain · 10:30</span>
+              </span>
+              <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#e4f5eb] text-[10px] font-black text-[#14804a]">✓</span>
+            </div>
+
+            <div className="home-notice-float-delayed absolute bottom-[19%] right-0 z-20 flex items-center gap-2.5 rounded-2xl border border-[#dceaf6] bg-white px-3 py-2.5 shadow-[0_18px_40px_-20px_rgba(0,58,102,0.35)] sm:right-0 sm:px-4 sm:py-3">
+              <span className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-[#e7f2fb] text-[#0065a1]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 5h4m-4 2.5h2m-2 6h4" />
+                </svg>
+                <span className="absolute right-0 top-0 h-2 w-2 rounded-full border border-white bg-[#1978be]" />
+              </span>
+              <span>
+                <span className="block text-[9px] font-bold text-[#102746] sm:text-[10px]">Votre tour approche</span>
+                <span className="block text-[8px] text-slate-500 sm:text-[9px]">Encore 2 personnes</span>
+              </span>
             </div>
           </div>
         </div>

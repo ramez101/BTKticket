@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useAgencySocket } from '@/hooks/useSocket'
+import BTKHeader from '@/components/shared/BTKHeader'
 
 type GuichetCall = {
   label: string
@@ -20,6 +21,7 @@ export default function EcranPage() {
     'Merci pour votre confiance',
   ]
   const [agencies, setAgencies] = useState<any[]>([])
+  const [agencySearch, setAgencySearch] = useState('')
   const [selectedAgency, setSelectedAgency] = useState<any>(null)
   const [agencyData, setAgencyData] = useState<any>(null)
   const [clock, setClock] = useState('')
@@ -48,7 +50,7 @@ export default function EcranPage() {
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const status = await fetch('/api/service-status').then(r => r.json())
+      const status = await fetch('/api/service-status', { cache: 'no-store' }).then(r => r.json())
         setOpenStatus({
           open: Boolean(status.open),
           message: status.open ? 'Bienvenue !' : status.message || 'Hors horaires de travail',
@@ -159,33 +161,73 @@ export default function EcranPage() {
   });
 
   if (!selectedAgency) {
+    const filteredAgencies = agencies.filter(agency => (
+      agency.isActive &&
+      `${agency.code} ${agency.name} ${agency.city}`.toLowerCase().includes(agencySearch.trim().toLowerCase())
+    ))
+
     return (
       <main className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-gradient-to-br from-white via-[#edf7ff] to-[#d8ebff] p-3 text-[#0065a1] sm:p-6 lg:p-8">
         <div className="pointer-events-none absolute -right-24 top-10 h-72 w-72 rounded-full bg-[#0065a1]/10 blur-3xl" />
         <div className="pointer-events-none absolute -left-24 bottom-0 h-72 w-72 rounded-full bg-[#0065a1]/10 blur-3xl" />
-        <section className="relative w-full max-w-4xl rounded-[32px] border border-[#dbeaf8] bg-white/95 p-5 shadow-[0_40px_100px_-50px_rgba(0,101,161,0.28)] backdrop-blur sm:p-8">
-          <div className="mb-8 flex flex-col items-center text-center">
-            <span className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[#dbeaf8] bg-white shadow-sm sm:h-20 sm:w-20">
-              <img src="/BTK.png" alt="BTK" className="h-11 w-auto sm:h-14" />
-            </span>
-            <h1 className="mt-5 text-2xl font-black text-[#003a66] sm:text-3xl">Écran guichets</h1>
-            <p className="mt-2 text-sm font-semibold text-slate-500">Sélectionnez l'agence à afficher</p>
-            <div className="mt-4 font-mono text-xl font-black text-[#0065a1]">{clock}</div>
+        <section className="relative w-full max-w-7xl rounded-[32px] border border-[#dbeaf8] bg-white/95 p-5 shadow-[0_40px_100px_-50px_rgba(0,101,161,0.28)] backdrop-blur sm:p-8">
+          <div className="mb-7 grid gap-6 border-b border-[#e5edf5] pb-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)] lg:items-center sm:mb-8 sm:pb-8">
+            <div className="flex min-w-0 items-center gap-4 sm:gap-5">
+              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-[#dbeaf8] bg-white shadow-sm sm:h-20 sm:w-20">
+                <img src="/BTK.png" alt="BTK" className="h-11 w-auto sm:h-14" />
+              </span>
+              <div className="min-w-0">
+                <h1 className="text-2xl font-black text-[#003a66] sm:text-3xl">Écran guichets</h1>
+                <p className="mt-1.5 text-sm font-semibold text-slate-500">Sélectionnez l'agence à afficher</p>
+                <div className="mt-2 font-mono text-lg font-black tabular-nums text-[#0065a1] sm:text-xl">{clock}</div>
+              </div>
+            </div>
+
+            <label className="block w-full">
+              <span className="mb-2 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Rechercher une agence</span>
+              <span className="flex items-center gap-3 rounded-xl border border-[#d9e5f2] bg-white px-4 shadow-sm transition focus-within:border-[#0065a1] focus-within:ring-2 focus-within:ring-[#e4f2ff]">
+                <svg className="shrink-0 text-slate-400" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-4-4" />
+                </svg>
+                <input
+                  type="search"
+                  value={agencySearch}
+                  onChange={event => setAgencySearch(event.target.value)}
+                  placeholder="Nom, ville ou code agence"
+                  className="min-w-0 flex-1 border-0 bg-transparent py-3 text-sm text-[#102746] outline-none placeholder:text-slate-400 focus:ring-0"
+                />
+              </span>
+            </label>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {agencies.filter(a => a.isActive).map(a => (
+          {filteredAgencies.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[#cbd9e8] bg-[#f8fbfe] px-5 py-12 text-center">
+              <p className="text-sm font-bold text-[#102746]">Aucune agence trouvée</p>
+              <p className="mt-1 text-xs text-slate-500">Essayez un autre nom, une autre ville ou un code agence.</p>
+            </div>
+          ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {filteredAgencies.map(a => (
               <button
                 key={a.id}
                 onClick={() => selectAgency(a)}
-                className="rounded-2xl border border-[#dbeaf8] bg-[#f4fbff] p-4 text-left transition hover:-translate-y-0.5 hover:bg-white hover:shadow-lg hover:shadow-[#0065a1]/10 hover:ring-1 hover:ring-[#0065a1]"
+                className="group rounded-2xl border border-[#dbeaf8] bg-[#f4fbff] p-4 text-left transition hover:-translate-y-0.5 hover:border-[#9fc1e5] hover:bg-white hover:shadow-lg hover:shadow-[#0065a1]/10 focus:outline-none focus:ring-2 focus:ring-[#0065a1] focus:ring-offset-2"
               >
-                <div className="text-xs font-black text-[#0065a1]">{a.code}</div>
-                <div className="mt-2 font-black text-[#003a66]">{a.name}</div>
-                <div className="mt-1 text-sm font-semibold text-slate-500">{a.city}</div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="rounded-lg bg-[#e4f2ff] px-2.5 py-1 text-xs font-black tracking-wide text-[#0065a1]">{a.code}</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[#0065a1] shadow-sm transition group-hover:bg-[#0065a1] group-hover:text-white" aria-hidden="true">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M5 12h14m-6-6 6 6-6 6" />
+                    </svg>
+                  </span>
+                </div>
+                <div className="mt-3 truncate font-black text-[#003a66] group-hover:text-[#0065a1]">{a.name}</div>
+                <div className="mt-1 truncate text-sm font-semibold text-slate-500">{a.city}</div>
               </button>
             ))}
           </div>
+          )}
         </section>
       </main>
     )
@@ -201,66 +243,29 @@ export default function EcranPage() {
 
   return (
     <main className={closed ? 'flex min-h-[100dvh] flex-col overflow-y-auto select-none bg-slate-100 text-[#003a66]' : 'flex min-h-[100dvh] flex-col overflow-y-auto select-none bg-gradient-to-br from-white via-[#edf7ff] to-[#d8ebff] text-[#003a66]'}>
-      <header className="shrink-0 border-b border-[#dbeaf8] bg-white/95 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.09)] backdrop-blur">
-        <div className="grid min-h-[118px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 px-4 py-3 sm:hidden">
-          <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-3">
-            <img src="/BTK.png" alt="BTK" className="h-12 w-auto shrink-0" />
-            <div className="min-w-0">
-              <div className="text-xl font-black leading-tight text-[#003a66]">BTK Easy</div>
-              <div className="truncate text-sm font-semibold text-slate-500">{agency?.name}</div>
+      <BTKHeader
+        subtitle={agency?.name || 'Écran guichets'}
+        right={(
+          <>
+            <div className="hidden min-w-0 text-right sm:block">
+              <div className={`text-[10px] font-bold uppercase tracking-wide ${closed ? 'text-slate-500' : 'text-btk-blue'}`}>
+                {closed ? 'Guichets fermés' : 'Guichets en service'}
+              </div>
+              <div className="max-w-[180px] truncate text-[10px] text-slate-500">{openStatus.message}</div>
             </div>
-          </div>
-
-          <div className="col-start-1 row-start-2 min-w-0 text-left">
-            <div className={`text-[0.82rem] font-semibold uppercase leading-tight ${closed ? 'text-gray-500' : 'text-btk-blue'}`}>
-              {closed ? 'Guichets fermes' : 'Guichets en service'}
-            </div>
-            <div className="mt-1 truncate text-xs text-gray-500">{openStatus.message}</div>
-          </div>
-
-          <div className="col-start-2 row-start-2 justify-self-end text-right">
-            <div className="font-mono text-lg font-semibold leading-tight text-gray-900">{clock}</div>
-            <div className="text-[0.72rem] capitalize leading-tight text-gray-500">{dateStr}</div>
-          </div>
-
-          <button
-            onClick={resetDisplay}
-            className="col-start-2 row-start-1 h-10 justify-self-end rounded-xl border border-[#0065a1] bg-white px-3 text-sm font-black text-[#0065a1] transition hover:bg-[#eaf5ff]"
-          >
-            Changer
-          </button>
-        </div>
-
-        <div className="hidden min-h-[92px] items-center justify-between gap-5 px-6 sm:flex lg:px-10">
-          <div className="flex min-w-0 items-center gap-5">
-            <img src="/BTK.png" alt="BTK" className="h-16 w-auto shrink-0" />
-            <div className="min-w-0">
-              <div className="text-2xl font-black leading-tight text-[#003a66]">BTK Easy</div>
-              <div className="truncate text-base font-semibold text-slate-500">{agency?.name}</div>
-            </div>
-          </div>
-
-          <div className="text-center">
-            <div className={`text-sm font-semibold uppercase ${closed ? 'text-gray-500' : 'text-btk-blue'}`}>
-              {closed ? 'Guichets fermes' : 'Guichets en service'}
-            </div>
-            <div className="mt-1 text-xs text-gray-500">{openStatus.message}</div>
-          </div>
-
-          <div className="flex items-center justify-end gap-5">
             <div className="text-right">
-              <div className="font-mono text-2xl font-semibold text-gray-900">{clock}</div>
-              <div className="text-xs capitalize text-gray-500">{dateStr}</div>
+              <div className="font-mono text-sm font-bold leading-tight tabular-nums text-[#102746] sm:text-base">{clock}</div>
+              <div className="hidden text-[10px] capitalize text-slate-500 md:block">{dateStr}</div>
             </div>
             <button
               onClick={resetDisplay}
-              className="rounded-xl border border-[#0065a1] bg-white px-4 py-2 text-sm font-black text-[#0065a1] transition hover:bg-[#eaf5ff]"
+              className="rounded-lg border border-[#cbd7e6] bg-white px-3 py-2 text-xs font-bold text-btk-blue transition hover:bg-btk-bg"
             >
               Changer
             </button>
-          </div>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       <section className="flex min-h-0 flex-1 items-stretch justify-center p-3 sm:p-5 lg:p-6 xl:p-8">
         <div className="flex min-h-0 w-full max-w-[1500px]">
@@ -300,7 +305,7 @@ export default function EcranPage() {
                 Guichet fermé
               </div>
               <p className="mt-6 max-w-xl text-base font-semibold leading-7 text-red-800 sm:text-xl sm:leading-8">
-                Le service est actuellement fermé. Merci de votre confiance.
+                Merci de votre confiance.
               </p>
             </article>
           ) : (

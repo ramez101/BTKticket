@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import BTKHeader from '@/components/shared/BTKHeader'
 
 interface Charge {
   id: number
@@ -586,8 +587,16 @@ export default function ChargeDashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F3F8FC] py-6 lg:py-8">
-      <div className="mx-auto w-full max-w-[1760px] px-4 sm:px-6 lg:px-8">
+    <main className="workspace-page charge-dashboard-page min-h-screen bg-[#F3F8FC]">
+      <BTKHeader
+        subtitle="Espace chargé"
+        right={connectedCharge ? (
+          <span className="max-w-[38vw] truncate rounded-full bg-[#f1f6fc] px-3 py-1.5 text-xs font-semibold text-[#1565c0]">
+            {connectedCharge.name}
+          </span>
+        ) : undefined}
+      />
+      <div className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         {!connectedCharge ? (
           <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-2xl items-center py-8">
             <div className="w-full rounded-lg bg-white p-6 shadow-sm ring-1 ring-blue-100 sm:p-8">

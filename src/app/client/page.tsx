@@ -1,11 +1,11 @@
 'use client'
 
-import Link from 'next/link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAgencySocket } from '@/hooks/useSocket'
 import { SERVICES } from '@/types'
 import { formatInternationalPhone } from '@/lib/phone-countries'
 import { PhoneCountrySelect } from '@/components/shared/PhoneCountrySelect'
+import BTKHeader from '@/components/shared/BTKHeader'
 
 interface Agency {
   id: number
@@ -52,7 +52,7 @@ const stepItems: { key: Step; label: string }[] = [
   { key: 'ticket', label: 'Ticket' },
 ]
 
-const AGENCIES_PER_PAGE = 6
+const AGENCIES_PER_PAGE = 5
 const AGENCY_REFRESH_INTERVAL_MS = 15000
 
 function hasLocation(agency?: Pick<Agency, 'latitude' | 'longitude'> | null) {
@@ -93,31 +93,31 @@ function getMapUrl(agency?: Agency | null) {
 function getAgencyLoad(waitingCount: number) {
   if (waitingCount >= 20) {
     return {
-      label: 'Très chargé 🔴',
-      className: 'bg-red-50 text-red-700 ring-red-200',
+      label: 'Très chargé',
+      textClassName: 'text-red-700',
       dotClassName: 'bg-red-500',
     }
   }
 
   if (waitingCount >= 16) {
     return {
-      label: 'Chargé 🟠',
-      className: 'bg-orange-50 text-orange-700 ring-orange-200',
+      label: 'Chargé',
+      textClassName: 'text-orange-700',
       dotClassName: 'bg-orange-500',
     }
   }
 
   if (waitingCount >= 10) {
     return {
-      label: 'Attente moyenne 🟡',
-      className: 'bg-yellow-50 text-yellow-700 ring-yellow-200',
+      label: 'Attente moyenne',
+      textClassName: 'text-yellow-700',
       dotClassName: 'bg-yellow-500',
     }
   }
 
   return {
-    label: "Peu d'attente 🟢",
-    className: 'bg-green-50 text-green-700 ring-green-200',
+    label: "Peu d'attente",
+    textClassName: 'text-green-700',
     dotClassName: 'bg-green-500',
   }
 }
@@ -203,7 +203,7 @@ export default function ClientPage() {
   useEffect(() => {
     const check = async () => {
       try {
-        const status = await fetch('/api/service-status').then(r => r.json())
+        const status = await fetch('/api/service-status', { cache: 'no-store' }).then(r => r.json())
         setOpenStatus({ open: Boolean(status.open), message: status.message || 'Service indisponible' })
       } catch {
         setOpenStatus({ open: false, message: 'Service indisponible' })
@@ -432,30 +432,23 @@ export default function ClientPage() {
     ?? agencies.find(agency => agency.id === modeChoiceAgencyId)
     ?? null
   return (
-    <main className="flex min-h-[100dvh] flex-col bg-gradient-to-br from-white via-[#edf7ff] to-[#d8ebff] lg:h-[100dvh] lg:overflow-hidden">
-      <header className="shrink-0 border-b border-[#dbeaf8] bg-white/95 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.09)] backdrop-blur">
-        <div className="mx-auto flex min-h-[76px] w-full max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6">
-          <Link href="/" className="flex min-w-0 items-center gap-3">
-            <img src="/BTK.png" alt="BTK" className="h-11 w-auto shrink-0" />
-            <div className="min-w-0">
-              <div className="text-lg font-black leading-tight text-[#003a66]">BTK Easy</div>
-              <div className="text-xs font-semibold text-slate-500">Prise de ticket en ligne</div>
-            </div>
-          </Link>
-
-          <div className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+    <main className="workspace-page client-page flex min-h-[100dvh] flex-col bg-[#f2f5fa] lg:h-[100dvh] lg:overflow-hidden">
+      <BTKHeader
+        subtitle="Prise de ticket en ligne"
+        right={(
+          <div className={`inline-flex max-w-[42vw] items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
             openStatus.open ? 'bg-green-50 text-green-700 ring-1 ring-green-200' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
           }`}>
-            {openStatus.message}
+            <span className={`h-1.5 w-1.5 rounded-full ${openStatus.open ? 'bg-green-500' : 'bg-amber-500'}`} />
+            <span className="truncate">{openStatus.message}</span>
           </div>
-        </div>
-      </header>
+        )}
+      />
 
-      <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col px-4 py-5 sm:px-6 lg:overflow-hidden lg:py-6">
-        <div className="mb-5 shrink-0 flex flex-col gap-4 border-b border-[#dbeaf8] pb-5 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 flex-col px-4 py-5 sm:px-6 lg:overflow-hidden lg:px-10 lg:py-7">
+        <div className="mb-5 shrink-0 flex flex-col gap-4 pb-1 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0065a1]">BTK Easy</p>
-            <h1 className="mt-2 text-2xl font-black text-[#003a66] sm:text-3xl">Prenez votre ticket</h1>
+            <h1 className="text-3xl font-black tracking-tight text-[#003a66] sm:text-4xl">Prenez votre ticket</h1>
           </div>
 
           <div className="flex w-full gap-2 sm:w-auto">
@@ -464,16 +457,15 @@ export default function ClientPage() {
               return (
                 <div
                   key={item.key}
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 text-sm sm:flex-none ${
-                    active ? 'bg-btk-blue text-white shadow-sm' : 'bg-white text-gray-500 ring-1 ring-blue-100'
-                  }`}
+                  className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none"
                 >
-                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                    active ? 'bg-white text-btk-blue' : 'bg-blue-50 text-btk-blue'
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    active ? 'bg-btk-blue text-white' : 'bg-[#e5ebf4] text-slate-500'
                   }`}>
                     {index + 1}
                   </span>
-                  <span className="truncate font-medium">{item.label}</span>
+                  <span className={`truncate text-sm font-semibold ${active ? 'text-[#003a66]' : 'text-slate-500'}`}>{item.label}</span>
+                  {index < stepItems.length - 1 && <span className="hidden h-px w-8 bg-[#cbd7e6] sm:block" />}
                 </div>
               )
             })}
@@ -481,38 +473,35 @@ export default function ClientPage() {
         </div>
 
         {step === 'select' && (
-          <section className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[0.78fr_1.22fr]">
-            <div className="flex min-h-0 flex-col rounded-[28px] border border-[#dbeaf8] bg-white/95 p-5 shadow-[0_30px_80px_-42px_rgba(0,101,161,0.24)] lg:h-full">
+          <section className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <div className="flex min-h-0 flex-col rounded-2xl border border-[#dfe7f1] bg-white p-5 shadow-sm lg:h-full">
               <div>
-                <h2 className="text-xl font-black text-[#003a66]">Agence la plus proche</h2>
-                <p className="mt-2 text-sm leading-6 text-gray-500">
-                  Activez la localisation pour afficher automatiquement l'agence BTK la plus proche.
-                </p>
+                <h2 className="text-lg font-black text-[#102746]">Agence la plus proche</h2>
               </div>
 
-              <div className="mt-5 overflow-hidden rounded-2xl border border-[#dbeaf8] bg-[#f4fbff]">
+              <div className="mt-4 overflow-hidden rounded-xl border border-[#d9e5f2] bg-[#e6effa]">
                 {mapUrl ? (
                   <iframe
                     title={mapAgency ? `Carte ${mapAgency.name}` : 'Carte agence'}
                     src={mapUrl}
-                    className="h-56 w-full border-0 sm:h-64 lg:h-72"
+                    className="h-48 w-full border-0"
                     loading="lazy"
                   />
                 ) : (
-                  <div className="flex h-56 items-center justify-center px-5 text-center text-sm font-medium text-gray-500 sm:h-64 lg:h-72">
+                  <div className="flex h-48 items-center justify-center px-5 text-center text-sm font-medium text-slate-500">
                     Carte indisponible pour cette agence.
                   </div>
                 )}
               </div>
 
-              <div className="mt-4 rounded-2xl border border-[#dbeaf8] bg-[#f4fbff] p-4">
+              <div className="mt-3 rounded-xl border border-[#d9e5f2] bg-[#f4f8fd] p-3.5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold uppercase text-gray-400">Plus proche</div>
-                    <div className="mt-1 truncate text-lg font-black text-gray-900">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Plus proche</div>
+                    <div className="mt-1 truncate text-sm font-black text-[#102746]">
                       {nearestAgency?.agency.name ?? 'Position non detectee'}
                     </div>
-                    <div className="mt-1 text-sm leading-5 text-gray-500">
+                    <div className="mt-1 text-xs leading-4 text-slate-500">
                       {nearestAgency
                         ? nearestAgency.agency.address || nearestAgency.agency.city
                         : locationStatus === 'denied'
@@ -530,12 +519,12 @@ export default function ClientPage() {
                   )}
                 </div>
 
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <div className="mt-3 grid gap-2">
                   <button
                     type="button"
                     onClick={locateClient}
                     disabled={locationStatus === 'loading'}
-                    className="rounded-lg border border-blue-100 bg-white px-4 py-2 text-sm font-semibold text-btk-blue transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-lg border border-btk-blue bg-white px-3 py-2 text-xs font-bold text-btk-blue transition hover:bg-btk-bg disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {locationStatus === 'loading' ? 'Localisation...' : 'Detecter ma position'}
                   </button>
@@ -543,20 +532,20 @@ export default function ClientPage() {
                     type="button"
                     onClick={() => nearestAgency && openTicketModeChoice(nearestAgency.agency.id)}
                     disabled={!nearestAgency}
-                    className="rounded-lg bg-btk-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-btk-dark disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-lg bg-btk-blue px-3 py-2 text-xs font-bold text-white transition hover:bg-btk-dark disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Choisir cette agence
                   </button>
                 </div>
               </div>
 
-              <div className="mt-5">
-                <label htmlFor="agency-search" className="mb-2 block text-xs font-semibold uppercase text-gray-500">
+              <div className="mt-4">
+                <label htmlFor="agency-search" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
                   Recherche
                 </label>
                 <input
                   id="agency-search"
-                  className="btk-input bg-white"
+                  className="btk-input rounded-lg bg-white px-3 py-2.5 text-xs"
                   placeholder="Nom, ville ou code agence"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
@@ -564,14 +553,21 @@ export default function ClientPage() {
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-col">
+            <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-[#dfe7f1] bg-white shadow-sm">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#e8edf4] px-5 py-4">
+                <h2 className="text-base font-black text-[#102746]">Choisir une agence</h2>
+                <span className="text-right text-[11px] font-medium text-slate-500">
+                  <span className="hidden sm:inline">Agences actives · attente en direct</span>
+                  <span className="sm:hidden">Agences actives · direct</span>
+                </span>
+              </div>
               {agencies.length === 0 ? (
-                <div className="flex flex-1 items-center justify-center rounded-lg bg-white p-6 text-center text-sm text-gray-500 shadow-sm ring-1 ring-blue-100">
+                <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-slate-500">
                   Aucune agence trouvee.
                 </div>
               ) : (
                 <>
-                  <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-rows-3">
+                  <div className="agency-list min-h-0 flex-1 grid auto-rows-fr gap-2 overflow-visible p-3 pr-2" aria-label="Liste des agences">
                     {agencies.map(a => {
                       const load = getAgencyLoad(a.waitingCount)
                       const distanceKm = clientLocation ? getDistanceKm(clientLocation, a) : null
@@ -580,64 +576,62 @@ export default function ClientPage() {
                         <button
                           key={a.id}
                           onClick={() => openTicketModeChoice(a.id)}
-                  className="group grid h-full min-h-0 w-full grid-cols-[auto_1fr] gap-3 overflow-hidden rounded-2xl border border-[#dbeaf8] bg-white/95 p-3 text-left shadow-[0_20px_50px_-36px_rgba(0,101,161,0.2)] transition hover:-translate-y-0.5 hover:border-[#0065a1] hover:shadow-lg lg:p-3.5"
+                          className="group grid min-h-[104px] w-full grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_1fr] items-start gap-x-3 gap-y-2 overflow-hidden rounded-2xl border border-[#dbeaf8] bg-white/95 p-3 text-left shadow-[0_20px_50px_-36px_rgba(0,101,161,0.2)] transition hover:-translate-y-0.5 hover:border-[#0065a1] hover:shadow-lg lg:h-full lg:min-h-0 lg:grid-cols-[auto_minmax(0,1fr)_minmax(280px,0.75fr)_auto] lg:grid-rows-1 lg:items-center lg:gap-2.5 lg:p-2.5"
                         >
-                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e4f2ff] text-sm font-black text-[#0065a1] lg:h-[52px] lg:w-[52px]">
+                          <div className="row-span-2 flex h-12 w-12 self-center items-center justify-center rounded-2xl bg-[#e4f2ff] text-sm font-black text-[#0065a1] lg:row-span-1 lg:h-11 lg:w-11">
                             {a.code}
                           </div>
-                          <div className="flex min-w-0 flex-col">
-                            <div className="flex min-w-0 items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="truncate text-lg font-black leading-tight text-[#003a66] group-hover:text-[#0065a1] lg:text-xl">{a.name}</div>
-                                <div className="mt-0.5 truncate text-sm font-medium text-gray-600 lg:text-base">
-                                  {formatDistance(distanceKm) || a.city}
-                                </div>
-                              </div>
-                              <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 lg:px-2.5 ${load.className}`}>
-                                <span className={`h-2 w-2 rounded-full ${load.dotClassName}`} />
-                                {load.label}
+                          <div className="min-w-0 self-center">
+                            <div className="truncate text-sm font-black leading-tight text-[#102746] group-hover:text-btk-blue">{a.name}</div>
+                            <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${load.dotClassName}`} />
+                              <span className={`truncate text-[11px] font-medium ${load.textClassName}`}>
+                                {formatDistance(distanceKm) || a.city} · {load.label}
                               </span>
                             </div>
+                          </div>
 
-                            <div className="mt-auto grid grid-cols-3 gap-1.5 pt-2 text-xs">
-                              <div className="min-w-0 rounded-md bg-green-50 px-2 py-1">
-                                <div className="truncate text-[9px] font-semibold uppercase text-green-700/70 lg:text-[10px]">En cours</div>
-                                <div className="mt-0.5 truncate font-bold leading-tight text-green-700">
-                                  {a.currentCalled > 0 ? a.currentCalled : '-'}
-                                </div>
-                              </div>
-                              <div className="min-w-0 rounded-md bg-blue-50 px-2 py-1">
-                                <div className="truncate text-[9px] font-semibold uppercase text-btk-blue/70 lg:text-[10px]">Attente</div>
-                                <div className="mt-0.5 truncate font-bold leading-tight text-btk-blue">{a.waitingCount}</div>
-                              </div>
-                              <div className="min-w-0 rounded-md bg-orange-50 px-2 py-1">
-                                <div className="truncate text-[9px] font-semibold uppercase text-orange-600/70 lg:text-[10px]">Temps</div>
-                                <div className="mt-0.5 truncate font-bold leading-tight text-orange-600">~{a.estimatedWait} min</div>
-                              </div>
+                          <div className="col-start-2 col-span-2 row-start-2 grid w-full grid-cols-3 gap-2 self-end text-[10px] lg:col-start-3 lg:col-span-1 lg:row-start-1 lg:w-auto">
+                            <div className="min-w-0 lg:text-center">
+                              <div className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500">En cours</div>
+                              <div className="mt-0.5 truncate text-xs font-bold text-[#102746]">{a.currentCalled > 0 ? a.currentCalled : '-'}</div>
+                            </div>
+                            <div className="min-w-0 lg:text-center">
+                              <div className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500">Attente</div>
+                              <div className="mt-0.5 truncate text-xs font-bold text-[#102746]">{a.waitingCount}</div>
+                            </div>
+                            <div className="min-w-0 lg:text-center">
+                              <div className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500">Temps</div>
+                              <div className="mt-0.5 truncate text-xs font-bold text-[#102746]">~{a.estimatedWait} min</div>
                             </div>
                           </div>
+                          <span aria-hidden="true" className="col-start-3 row-start-1 flex h-8 w-8 self-center items-center justify-center rounded-full bg-[#102746] text-white transition group-hover:bg-btk-blue lg:col-start-4 lg:row-start-1 lg:h-9 lg:w-9">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M5 12h14M13 6l6 6-6 6" />
+                            </svg>
+                          </span>
                         </button>
                       )
                     })}
                   </div>
 
-                  <div className="mt-4 flex shrink-0 items-center justify-between rounded-lg bg-white px-4 py-3 shadow-sm ring-1 ring-blue-100">
+                  <div className="flex shrink-0 items-center justify-between border-t border-[#e8edf4] bg-[#fbfcfe] px-4 py-3">
                     <button
                       type="button"
                       onClick={() => setAgencyPage(page => Math.max(1, page - 1))}
                       disabled={currentAgencyPage === 1}
-                      className="rounded-lg border border-blue-100 px-4 py-2 text-sm font-semibold text-btk-blue transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-lg border border-[#d9e2ee] bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-[#f2f6fb] disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      Precedent
+                      Précédent
                     </button>
-                    <div className="text-sm font-semibold text-gray-600">
+                    <div className="text-xs font-semibold text-[#102746]">
                       Page {currentAgencyPage} / {totalAgencyPages}
                     </div>
                     <button
                       type="button"
                       onClick={() => setAgencyPage(page => Math.min(totalAgencyPages, page + 1))}
                       disabled={currentAgencyPage === totalAgencyPages}
-                      className="rounded-lg border border-blue-100 px-4 py-2 text-sm font-semibold text-btk-blue transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-lg bg-[#102746] px-4 py-2 text-xs font-semibold text-white transition hover:bg-btk-blue disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Suivant
                     </button>
@@ -649,76 +643,95 @@ export default function ClientPage() {
         )}
 
         {(step === 'service' || step === 'ticket') && selectedAgency && (
-          <section className="grid gap-6 lg:grid-cols-[0.78fr_1.22fr]">
-            <aside className="rounded-[28px] border border-[#dbeaf8] bg-white/95 p-5 shadow-[0_30px_80px_-42px_rgba(0,101,161,0.24)]">
-              <button onClick={() => setStep('select')} className="mb-5 text-sm font-semibold text-red-600 hover:text-red-800">
+          <section className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(300px,0.78fr)_minmax(0,1.22fr)] lg:items-stretch">
+            <aside className="flex min-h-0 flex-col rounded-2xl border border-[#dfe7f1] bg-white p-4 shadow-sm sm:p-5">
+              <button
+                onClick={() => setStep('select')}
+                className="mb-4 inline-flex w-fit items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-bold text-btk-blue transition hover:bg-[#f1f6fc]"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 12H5m7 7-7-7 7-7" />
+                </svg>
                 Retour aux agences
               </button>
 
-              <div className="border-b border-blue-50 pb-5">
-                <div className="text-xs font-semibold uppercase text-gray-400">Agence selectionnee</div>
-                <h2 className="mt-2 text-xl font-bold text-gray-900">{selectedAgency.name}</h2>
-                <p className="mt-1 text-sm text-gray-500">{selectedAgency.address || selectedAgency.city}</p>
+              <div className="border-b border-[#e8edf4] pb-4">
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Agence sélectionnée</div>
+                <h2 className="mt-1.5 text-xl font-black leading-tight text-[#102746]">{selectedAgency.name}</h2>
+                <p className="mt-1.5 text-sm leading-5 text-slate-500">{selectedAgency.address || selectedAgency.city}</p>
               </div>
 
-              <div className="mt-5 overflow-hidden rounded-lg bg-blue-50 ring-1 ring-blue-100">
+              <div className="mt-4 h-48 shrink-0 overflow-hidden rounded-xl border border-[#d9e5f2] bg-[#e6effa] sm:h-56 lg:min-h-[220px] lg:flex-1">
                 {mapUrl ? (
                   <iframe
                     title={`Carte ${selectedAgency.name}`}
                     src={mapUrl}
-                    className="h-56 w-full border-0"
+                    className="h-full w-full border-0"
                     loading="lazy"
                   />
                 ) : (
-                  <div className="flex h-56 items-center justify-center px-4 text-center text-sm text-gray-500">
+                  <div className="flex h-full items-center justify-center px-4 text-center text-sm text-slate-500">
                     Carte indisponible pour cette agence.
                   </div>
                 )}
               </div>
 
-              <div className="mt-5 grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-lg bg-green-50 p-3">
-                  <div className="text-2xl font-bold text-green-700 tabular-nums">
+              <div className="mt-4 grid shrink-0 grid-cols-3 gap-2 text-center sm:gap-3">
+                <div className="rounded-xl border border-green-100 bg-green-50/70 px-2 py-3">
+                  <div className="text-xl font-black text-green-700 tabular-nums sm:text-2xl">
                     {currentCalled > 0 ? currentCalled : '-'}
                   </div>
-                  <div className="mt-1 text-xs font-medium text-green-700/70">En cours</div>
+                  <div className="mt-1 text-[11px] font-semibold text-green-700/75 sm:text-xs">En cours</div>
                 </div>
-                <div className="rounded-lg bg-blue-50 p-3">
-                  <div className="text-2xl font-bold text-btk-blue tabular-nums">{waitingCount}</div>
-                  <div className="mt-1 text-xs font-medium text-btk-blue/70">En attente</div>
+                <div className="rounded-xl border border-blue-100 bg-blue-50/70 px-2 py-3">
+                  <div className="text-xl font-black text-btk-blue tabular-nums sm:text-2xl">{waitingCount}</div>
+                  <div className="mt-1 text-[11px] font-semibold text-btk-blue/75 sm:text-xs">En attente</div>
                 </div>
-                <div className="rounded-lg bg-orange-50 p-3">
-                  <div className="text-2xl font-bold text-orange-600 tabular-nums">{estimatedWait}</div>
-                  <div className="mt-1 text-xs font-medium text-orange-600/70">Minutes</div>
+                <div className="rounded-xl border border-orange-100 bg-orange-50/70 px-2 py-3">
+                  <div className="text-xl font-black text-orange-600 tabular-nums sm:text-2xl">{estimatedWait}</div>
+                  <div className="mt-1 text-[11px] font-semibold text-orange-600/75 sm:text-xs">Minutes</div>
                 </div>
               </div>
             </aside>
 
-            <div className="rounded-[28px] border border-[#dbeaf8] bg-white/95 p-5 shadow-[0_30px_80px_-42px_rgba(0,101,161,0.24)]">
-              <div className="mb-5">
-                <h2 className="text-xl font-bold text-gray-900">Choisir le service</h2>
-                <p className="mt-2 text-sm text-gray-500">Votre ticket sera ajoute a la file de l'agence selectionnee.</p>
+            <div className="flex min-h-0 flex-col rounded-2xl border border-[#dfe7f1] bg-white p-4 shadow-sm sm:p-6 lg:p-7">
+              <div className="mb-5 flex shrink-0 flex-col gap-3 border-b border-[#e8edf4] pb-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-[#102746] sm:text-2xl">Choisir le service</h2>
+                  <p className="mt-1.5 text-sm text-slate-500">Votre ticket sera ajouté à la file de l'agence sélectionnée.</p>
+                </div>
+                <span className="inline-flex w-fit items-center rounded-full bg-[#f1f6fc] px-3 py-1.5 text-xs font-bold text-[#1565c0]">
+                  {SERVICES.length} services disponibles
+                </span>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid content-start grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3.5">
                 {SERVICES.map(s => {
                   const active = selectedService === s.key
                   return (
                     <button
                       key={s.key}
                       onClick={() => setSelectedService(s.key)}
-                      className={`flex min-h-[76px] items-center gap-3 rounded-lg p-4 text-left ring-1 transition ${
+                      aria-pressed={active}
+                      className={`group flex min-h-[76px] items-center gap-3 rounded-xl border p-3.5 text-left transition sm:min-h-[88px] sm:gap-4 sm:p-4 ${
                         active
-                          ? 'bg-blue-50 ring-btk-blue shadow-sm'
-                          : 'bg-white ring-blue-100 hover:bg-blue-50/50 hover:ring-blue-200'
+                          ? 'border-btk-blue bg-[#f1f7fd] shadow-sm ring-1 ring-btk-blue'
+                          : 'border-[#e1e9f2] bg-white hover:border-[#9fc1e5] hover:bg-[#f8fbff]'
                       }`}
                     >
-                      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${
-                        active ? 'bg-btk-blue text-white' : 'bg-gray-100 text-gray-600'
+                      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-black transition ${
+                        active ? 'bg-btk-blue text-white' : 'bg-[#f1f4f8] text-slate-600 group-hover:bg-[#e8f1fb] group-hover:text-btk-blue'
                       }`}>
                         {s.key.slice(0, 2).toUpperCase()}
                       </span>
-                      <span className={`font-semibold ${active ? 'text-btk-blue' : 'text-gray-800'}`}>{s.key}</span>
+                      <span className={`flex-1 text-sm font-bold sm:text-base ${active ? 'text-[#0d47a1]' : 'text-[#26384d]'}`}>{s.key}</span>
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
+                        active ? 'border-btk-blue bg-btk-blue text-white' : 'border-[#d5dfeb] text-transparent'
+                      }`}>
+                        <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                          <path fillRule="evenodd" d="M16.704 5.29a1 1 0 0 1 .006 1.414l-7.2 7.26a1 1 0 0 1-1.42.004L3.29 9.17a1 1 0 0 1 1.42-1.407l4.09 4.13 6.49-6.597a1 1 0 0 1 1.414-.006Z" clipRule="evenodd" />
+                        </svg>
+                      </span>
                     </button>
                   )
                 })}
@@ -772,7 +785,7 @@ export default function ClientPage() {
               </section>
 
               <button
-                className="mt-5 w-full rounded-lg bg-btk-blue px-6 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-btk-dark disabled:cursor-not-allowed disabled:opacity-40"
+                className="mt-5 w-full shrink-0 rounded-xl bg-btk-blue px-6 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-btk-dark focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-[#a8c5e4] disabled:shadow-none sm:py-4 sm:text-base lg:mt-auto lg:pt-4"
                 onClick={takeTicket}
                 disabled={!selectedService || loading || !openStatus.open || (ticketMode === 'phone' && !customerPhone.trim())}
               >

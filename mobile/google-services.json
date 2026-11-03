@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "157233507352",
+    "project_id": "btk-easy",
+    "storage_bucket": "btk-easy.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:157233507352:android:b76b3d3c56689535a7e76d",
+        "android_client_info": {
+          "package_name": "com.btkbank.btkeasy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDl9ibywqDmgK6bZICJGS6krZs_sduBNlg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

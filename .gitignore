@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+.expo/
 .tools/
 
 # Next.js
@@ -13,6 +14,9 @@ dist/
 # Environment variables
 .env
 .env*.local
+
+# Firebase service-account credentials
+*-firebase-adminsdk-*.json
 
 # Logs
 npm-debug.log*

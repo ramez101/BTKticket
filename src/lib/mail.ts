@@ -166,6 +166,7 @@ export async function sendChargeAppointmentEmail(
     host,
     port,
     secure: process.env.MAIL_SECURE === 'true',
+    requireTLS: process.env.MAIL_REQUIRE_TLS === 'true',
     auth: user && pass ? { user, pass } : undefined,
   })
 
@@ -217,6 +218,7 @@ export async function sendAppointmentConfirmationEmail(input: AppointmentMailInp
     host,
     port,
     secure: process.env.MAIL_SECURE === 'true',
+    requireTLS: process.env.MAIL_REQUIRE_TLS === 'true',
     auth: user && pass ? { user, pass } : undefined,
   })
 
@@ -265,6 +267,7 @@ export async function sendTicketWaitNotification(input: {
     host,
     port,
     secure: process.env.MAIL_SECURE === 'true',
+    requireTLS: process.env.MAIL_REQUIRE_TLS === 'true',
     auth: user && pass ? { user, pass } : undefined,
   })
 

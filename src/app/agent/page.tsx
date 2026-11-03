@@ -1,8 +1,8 @@
 'use client'
 
-import Link from 'next/link'
 import { useState, useEffect, useCallback } from 'react'
 import PinModal from '@/components/shared/PinModal'
+import BTKHeader from '@/components/shared/BTKHeader'
 import { useAgencySocket } from '@/hooks/useSocket'
 
 interface QueueTicket {
@@ -154,7 +154,7 @@ export default function AgentPage() {
 
   if (!selectedAgency) {
     return (
-      <main className="min-h-screen bg-[#F3F8FC]">
+      <main className="workspace-page agent-page min-h-screen bg-[#F3F8FC]">
         <AgentHeader subtitle="Connexion guichet" />
 
         <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -193,7 +193,7 @@ export default function AgentPage() {
 
   if (!auth) {
     return (
-      <main className="min-h-screen bg-[#F3F8FC]">
+      <main className="workspace-page agent-page min-h-screen bg-[#F3F8FC]">
         <AgentHeader subtitle={selectedAgency.name} />
         {showPin && (
           <PinModal
@@ -231,7 +231,7 @@ export default function AgentPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F3F8FC]">
+    <main className="workspace-page agent-page min-h-screen bg-[#F3F8FC]">
       <AgentHeader
         subtitle={`${selectedAgency.name} - ${auth.guichetLabel}`}
         right={
@@ -434,20 +434,7 @@ export default function AgentPage() {
 }
 
 function AgentHeader({ subtitle, right }: { subtitle?: string; right?: React.ReactNode }) {
-  return (
-    <header className="border-b border-blue-100 bg-white shadow-sm">
-      <div className="mx-auto flex min-h-[76px] w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link href="/" className="flex min-w-0 items-center gap-3">
-          <img src="/BTK.png" alt="BTK" className="h-11 w-auto shrink-0" />
-          <div className="min-w-0">
-            <div className="text-lg font-bold leading-tight text-gray-900">BTK Easy</div>
-            <div className="truncate text-xs font-medium text-gray-500">{subtitle || 'Espace agent'}</div>
-          </div>
-        </Link>
-        {right}
-      </div>
-    </header>
-  )
+  return <BTKHeader subtitle={subtitle || 'Espace agent'} right={right} />
 }
 
 function StatCard({ label, value, tone }: { label: string; value: number; tone: 'blue' | 'green' | 'orange' }) {

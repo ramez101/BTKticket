@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { formatInternationalPhone } from '@/lib/phone-countries'
 import { PhoneCountrySelect } from '@/components/shared/PhoneCountrySelect'
+import BTKHeader from '@/components/shared/BTKHeader'
 
 type Agency = {
   id: number
@@ -75,6 +76,8 @@ const stepItems: { key: Step; label: string }[] = [
   { key: 'confirmed', label: 'RDV' },
 ]
 
+const AGENCIES_PER_PAGE = 20
+
 function todayInputDate() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Tunis' })
 }
@@ -105,6 +108,7 @@ export default function RendezVousPage() {
   const [availability, setAvailability] = useState<AvailabilityResponse | null>(null)
   const [step, setStep] = useState<Step>('agency')
   const [search, setSearch] = useState('')
+  const [agencyPage, setAgencyPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [notice, setNotice] = useState('')
   const [cancelCode, setCancelCode] = useState('')
@@ -174,6 +178,12 @@ export default function RendezVousPage() {
     if (!value) return agencies
     return agencies.filter(agency => `${agency.code} ${agency.name} ${agency.city}`.toLowerCase().includes(value))
   }, [agencies, search])
+  const totalAgencyPages = Math.max(1, Math.ceil(filteredAgencies.length / AGENCIES_PER_PAGE))
+  const currentAgencyPage = Math.min(agencyPage, totalAgencyPages)
+  const visibleAgencies = filteredAgencies.slice(
+    (currentAgencyPage - 1) * AGENCIES_PER_PAGE,
+    currentAgencyPage * AGENCIES_PER_PAGE,
+  )
 
   const canSubmit = Boolean(
     selectedAgency &&
@@ -462,65 +472,60 @@ export default function RendezVousPage() {
   }
 
   return (
-    <main className="min-h-[100dvh] overflow-x-hidden bg-gradient-to-br from-white via-[#edf7ff] to-[#d8ebff]">
-      <header className="border-b border-[#dbeaf8] bg-white/95 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.09)] backdrop-blur">
-        <div className="mx-auto flex min-h-[76px] w-full max-w-[1760px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex min-w-0 items-center gap-3">
-            <img src="/BTK.png" alt="BTK" className="h-11 w-auto shrink-0" />
-            <div className="min-w-0">
-              <div className="text-lg font-black leading-tight text-[#003a66]">BTK Easy</div>
-              <div className="truncate text-xs font-semibold text-slate-500">Prise de rendez-vous</div>
-            </div>
-          </Link>
+    <main className="workspace-page rdv-page min-h-[100dvh] overflow-x-hidden bg-[#f2f5fa]">
+      <BTKHeader
+        subtitle="Prise de rendez-vous"
+        right={(
           <Link
             href="/"
-            className="rounded-full border border-[#0065a1] bg-white px-4 py-2 text-sm font-black text-[#0065a1] transition hover:bg-[#eaf5ff]"
+            className="rounded-full border border-[#cbd7e6] bg-white px-4 py-2 text-xs font-bold text-[#102746] transition hover:border-btk-blue hover:bg-[#f1f6fc] hover:text-btk-blue"
           >
             Accueil
           </Link>
-        </div>
-      </header>
+        )}
+      />
 
-      <section className="mx-auto w-full max-w-[1760px] overflow-x-hidden px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
-          <div className="mb-5 grid gap-6 rounded-[32px] border border-[#dbeaf8] bg-white/95 p-5 shadow-[0_30px_80px_-42px_rgba(0,101,161,0.24)] sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(380px,560px)] lg:items-center">
+      <section className="mx-auto w-full max-w-[1440px] overflow-x-hidden px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.16em] text-[#0065a1]">Rendez-vous avec un chargé</p>
-              <h1 className="mt-2 text-3xl font-black text-[#003a66] lg:text-4xl">Prendre un rendez-vous</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-600">
+              <h1 className="mt-1 text-3xl font-black tracking-tight text-[#102746] sm:text-4xl">Prendre un rendez-vous</h1>
+              <p className="mt-1.5 max-w-2xl text-xs leading-5 text-slate-500 sm:text-sm">
                 Choisissez une agence, un chargé, puis réservez un créneau disponible dans son calendrier.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
               {stepItems.map((item, index) => {
                 const active = item.key === step
                 return (
                   <div
                     key={item.key}
-                    className={`rounded-lg border px-3 py-3 text-center text-xs font-black uppercase tracking-[0.14em] transition ${
-                      active ? 'border-btk-blue bg-btk-blue text-white shadow-sm' : 'border-blue-100 bg-slate-50 text-gray-500'
-                    }`}
+                    className="flex items-center gap-2"
                   >
-                    <div className={`mb-1 text-[10px] ${active ? 'text-blue-100' : 'text-gray-400'}`}>Etape {index + 1}</div>
-                    <div>{item.label}</div>
+                    <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                      active ? 'bg-btk-blue text-white' : 'bg-[#e5ebf4] text-slate-500'
+                    }`}>{index + 1}</span>
+                    <span className={`text-xs font-semibold sm:text-sm ${active ? 'text-[#102746]' : 'text-slate-500'}`}>{item.label}</span>
+                    {index < stepItems.length - 1 && <span className="mx-0.5 hidden h-px w-5 bg-[#cbd7e6] sm:block" />}
                   </div>
                 )
               })}
             </div>
           </div>
 
-        <section className="mb-5 rounded-[28px] border border-[#dbeaf8] bg-white/95 p-4 shadow-[0_20px_50px_-36px_rgba(0,101,161,0.18)]">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_160px] lg:items-end">
+        {step === 'agency' && (
+        <section className="mb-6 rounded-2xl border border-[#102746] bg-[#102746] p-4 text-white shadow-sm sm:px-5">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px_auto] sm:items-center">
             <div>
-              <h2 className="text-lg font-black text-gray-950">Annulation RDV</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-base font-black sm:text-lg">Annuler un RDV</h2>
+              <p className="mt-1 text-xs leading-5 text-blue-100/80">
                 Entrez le code RDV de 5 caractères, puis confirmez l'annulation.
               </p>
             </div>
-            <label className="block text-xs font-black uppercase text-gray-400">
+            <label className="block text-[9px] font-bold uppercase tracking-[0.16em] text-blue-100/75">
               Code RDV
               <input
-                className="btk-input mt-2 text-center font-black uppercase tracking-[0.24em]"
+                className="mt-1.5 w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2.5 text-center text-sm font-black uppercase tracking-[0.24em] text-white outline-none placeholder:text-white/40 focus:border-white/50 focus:ring-2 focus:ring-white/15"
                 maxLength={5}
                 placeholder="A1B2C"
                 value={cancelCode}
@@ -531,7 +536,7 @@ export default function RendezVousPage() {
               type="button"
               onClick={requestCancelAppointment}
               disabled={cancelLoading || cancelLookupLoading}
-              className="rounded-lg bg-red-600 px-4 py-3 text-sm font-black text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-200"
+              className="rounded-lg bg-red-600 px-5 py-2.5 text-xs font-black text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {cancelLookupLoading ? 'Vérification...' : 'Annuler RDV'}
             </button>
@@ -546,6 +551,7 @@ export default function RendezVousPage() {
             </div>
           )}
         </section>
+        )}
 
         {notice && (
           <div className="mb-5 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700 ring-1 ring-red-100">
@@ -554,48 +560,84 @@ export default function RendezVousPage() {
         )}
 
         {step === 'agency' && (
-          <section className="grid gap-5 lg:grid-cols-[380px_1fr] 2xl:grid-cols-[420px_1fr]">
-            <aside className="rounded-[28px] border border-[#dbeaf8] bg-white/95 p-5 shadow-[0_30px_80px_-42px_rgba(0,101,161,0.24)] lg:sticky lg:top-6 lg:self-start">
-              <h2 className="text-xl font-black text-gray-950">Choisir l'agence</h2>
-              <p className="mt-2 text-sm leading-6 text-gray-500">
-                La liste affiche les agences actives. La disponibilité dépend ensuite du chargé choisi.
-              </p>
-              <label className="mt-5 block">
-                <span className="mb-2 block text-xs font-black uppercase text-gray-400">Recherche</span>
+          <section>
+            <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-xl font-black tracking-tight text-[#102746] sm:text-2xl">Choisir l'agence</h2>
+                <p className="mt-1 text-xs text-slate-500 sm:text-sm">
+                  La liste affiche les agences actives. La disponibilité dépend ensuite du chargé choisi.
+                </p>
+              </div>
+              <label className="block w-full sm:max-w-[320px]">
+                <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Recherche</span>
                 <input
-                  className="btk-input"
+                  className="btk-input rounded-lg bg-white px-3 py-2.5 text-xs"
                   placeholder="Nom, ville ou code agence"
                   value={search}
-                  onChange={event => setSearch(event.target.value)}
+                  onChange={event => {
+                    setSearch(event.target.value)
+                    setAgencyPage(1)
+                  }}
                 />
               </label>
-            </aside>
+            </div>
 
             {filteredAgencies.length === 0 ? (
-              <div className="rounded-lg bg-white p-10 text-center text-sm font-semibold text-gray-400 shadow-sm ring-1 ring-blue-100">
+              <div className="rounded-2xl border border-[#dfe7f1] bg-white p-10 text-center text-sm font-semibold text-slate-500 shadow-sm">
                 Aucune agence trouvée.
               </div>
             ) : (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {filteredAgencies.map(agency => (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {visibleAgencies.map(agency => (
                   <button
                     key={agency.id}
                     type="button"
                     onClick={() => chooseAgency(agency)}
-                    className="group rounded-2xl border border-[#dbeaf8] bg-white/95 p-5 text-left shadow-[0_20px_50px_-36px_rgba(0,101,161,0.2)] transition hover:-translate-y-0.5 hover:border-[#0065a1] hover:shadow-lg"
+                    className="group flex min-h-[176px] flex-col rounded-2xl border border-[#dfe7f1] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#9fc1e5] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-btk-blue focus:ring-offset-2"
                   >
-                    <div className="mb-4 flex items-start justify-between gap-3">
-                      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e4f2ff] text-sm font-black text-[#0065a1]">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="flex h-9 min-w-[54px] items-center justify-center rounded-lg bg-[#e8f1fb] px-2 text-xs font-black tracking-wide text-[#1565c0]">
                         {agency.code}
                       </span>
-                      <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-700 ring-1 ring-green-200">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-bold text-green-700">
+                        <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
                         Active
                       </span>
                     </div>
-                    <div className="text-lg font-black text-[#003a66] group-hover:text-[#0065a1]">{agency.name}</div>
-                    <div className="mt-1 text-sm font-medium text-gray-500">{agency.address || agency.city}</div>
+                    <div className="mt-3 text-base font-black text-[#102746] group-hover:text-btk-blue">{agency.name}</div>
+                    <div className="mt-1 line-clamp-2 min-h-9 text-xs leading-4 text-slate-500">{agency.address || agency.city}</div>
+                    <div className="mt-auto flex items-center justify-between border-t border-[#edf1f6] pt-3 text-xs font-bold text-btk-blue">
+                      <span>Choisir cette agence</span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M5 12h14m-6-6 6 6-6 6" />
+                      </svg>
+                    </div>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {filteredAgencies.length > AGENCIES_PER_PAGE && (
+              <div className="mt-4 flex items-center justify-between rounded-xl border border-[#dfe7f1] bg-white px-4 py-3 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setAgencyPage(page => Math.max(1, page - 1))}
+                  disabled={currentAgencyPage === 1}
+                  className="rounded-lg border border-[#d9e2ee] px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-[#f2f6fb] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Précédent
+                </button>
+                <span className="text-xs font-semibold text-[#102746]">
+                  Page {currentAgencyPage} / {totalAgencyPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAgencyPage(page => Math.min(totalAgencyPages, page + 1))}
+                  disabled={currentAgencyPage === totalAgencyPages}
+                  className="rounded-lg bg-[#102746] px-4 py-2 text-xs font-semibold text-white transition hover:bg-btk-blue disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Suivant
+                </button>
               </div>
             )}
           </section>
@@ -659,8 +701,8 @@ export default function RendezVousPage() {
         )}
 
         {step === 'calendar' && selectedAgency && selectedCharge && (
-          <section className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)]">
-            <aside className="min-w-0 rounded-[24px] border border-[#dbeaf8] bg-white/95 p-4 shadow-[0_30px_80px_-42px_rgba(0,101,161,0.24)] sm:rounded-[28px] sm:p-5 xl:sticky xl:top-6 xl:self-start">
+          <section className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[320px_minmax(0,1fr)]">
+            <aside className="min-w-0 rounded-2xl border border-[#dfe7f1] bg-white p-4 shadow-sm sm:p-5 xl:sticky xl:top-6 xl:self-start">
               <button
                 type="button"
                 onClick={() => setStep('charge')}
@@ -669,14 +711,14 @@ export default function RendezVousPage() {
                 ← Retour charges
               </button>
 
-              <div className="rounded-2xl border border-[#dbeaf8] bg-[#f4fbff] p-4 sm:p-5">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-btk-blue">Votre chargé</p>
-                <h2 className="mt-3 break-words text-xl font-black text-gray-950 sm:text-2xl">{selectedCharge.name}</h2>
-                <p className="mt-1 text-sm text-gray-600">{selectedAgency.name}</p>
-                <p className="mt-2 text-sm text-gray-500">Sélectionnez la date souhaitée pour afficher les créneaux possibles.</p>
+              <div className="rounded-xl border border-[#d9e5f2] bg-[#f4f8fd] p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-btk-blue">Votre chargé</p>
+                <h2 className="mt-2 break-words text-xl font-black text-[#102746] sm:text-2xl">{selectedCharge.name}</h2>
+                <p className="mt-1 text-sm font-medium text-slate-600">{selectedAgency.name}</p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">Choisissez une date pour consulter les créneaux disponibles.</p>
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-1">
+              <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -684,7 +726,7 @@ export default function RendezVousPage() {
                     setSelectedDate(today)
                     fetchAvailability(selectedCharge.id, today)
                   }}
-                  className="rounded-lg border border-blue-100 bg-white px-4 py-3 text-sm font-black text-btk-blue transition hover:bg-blue-50"
+                  className="rounded-lg border border-[#d9e5f2] bg-white px-3 py-2.5 text-sm font-bold text-btk-blue transition hover:border-btk-blue hover:bg-[#f1f6fc]"
                 >
                   Aujourd'hui
                 </button>
@@ -695,17 +737,17 @@ export default function RendezVousPage() {
                     setSelectedDate(tomorrow)
                     fetchAvailability(selectedCharge.id, tomorrow)
                   }}
-                  className="rounded-lg border border-blue-100 bg-white px-4 py-3 text-sm font-black text-btk-blue transition hover:bg-blue-50"
+                  className="rounded-lg border border-[#d9e5f2] bg-white px-3 py-2.5 text-sm font-bold text-btk-blue transition hover:border-btk-blue hover:bg-[#f1f6fc]"
                 >
                   Demain
                 </button>
               </div>
 
-              <label className="mt-6 block">
-                <span className="mb-2 block text-xs font-black uppercase text-gray-400">Date</span>
+              <label className="mt-5 block">
+                <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Date du rendez-vous</span>
                 <input
                   type="date"
-                  className="btk-input w-full"
+                  className="btk-input w-full rounded-lg bg-white"
                   min={todayInputDate()}
                   value={selectedDate}
                   onChange={event => {
@@ -716,29 +758,29 @@ export default function RendezVousPage() {
               </label>
             </aside>
 
-            <div className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
-              <section className="min-w-0 rounded-[24px] border border-[#dbeaf8] bg-white/95 p-4 shadow-[0_30px_80px_-42px_rgba(0,101,161,0.24)] sm:rounded-[28px] sm:p-6">
-                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="grid min-w-0 gap-4 sm:gap-5 2xl:grid-cols-[minmax(0,1fr)_340px]">
+              <section className="min-w-0 rounded-2xl border border-[#dfe7f1] bg-white p-4 shadow-sm sm:p-5 lg:p-6">
+                <div className="mb-5 flex flex-col gap-3 border-b border-[#e8edf4] pb-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="text-xl font-black text-gray-950 sm:text-2xl">Calendrier</h2>
-                    <p className="mt-2 text-sm text-gray-500">{formatDate(selectedDate)}</p>
+                    <h2 className="text-xl font-black text-[#102746] sm:text-2xl">Calendrier</h2>
+                    <p className="mt-1.5 text-sm font-medium capitalize text-slate-500">{formatDate(selectedDate)}</p>
                     {availability?.serviceWindow && (
-                      <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-btk-blue">
+                      <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-btk-blue sm:text-xs">
                         Horaires agence : {availability.serviceWindow.label} {availability.serviceWindow.startTime}-{availability.serviceWindow.endTime}
                       </p>
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {availability?.holiday || availability?.weekend ? (
-                      <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-red-700 ring-1 ring-red-100">
+                      <span className="rounded-full bg-red-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-red-700 ring-1 ring-red-100">
                         Non disponible
                       </span>
                     ) : availability?.available ? (
-                      <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-green-700 ring-1 ring-green-100">
+                      <span className="rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-green-700 ring-1 ring-green-100">
                         Disponible
                       </span>
                     ) : (
-                      <span className="rounded-full bg-yellow-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-yellow-700 ring-1 ring-yellow-100">
+                      <span className="rounded-full bg-yellow-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-yellow-700 ring-1 ring-yellow-100">
                         Non disponible
                       </span>
                     )}
@@ -752,7 +794,7 @@ export default function RendezVousPage() {
                     Aucun créneau disponible pour cette date.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-5">
+                  <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 2xl:grid-cols-4">
                     {availability.slots.map(slot => {
                       const active = selectedTime === slot.time
                       const reasonText = (slot.reason ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -761,32 +803,38 @@ export default function RendezVousPage() {
                         <button
                           key={slot.time}
                           type="button"
+                          title={slot.available ? `Choisir le créneau de ${slot.time}` : slot.reason || 'Créneau indisponible'}
                           onClick={() => slot.available && setSelectedTime(slot.time)}
                           disabled={!slot.available}
-                          className={`min-w-0 rounded-xl border px-3 py-3 text-left text-sm font-black transition sm:rounded-lg sm:px-4 sm:py-4 ${
+                          className={`min-w-0 rounded-xl border px-3 py-3 text-left transition focus:outline-none focus:ring-2 focus:ring-btk-blue focus:ring-offset-2 ${
                             active
                               ? 'border-btk-blue bg-btk-blue text-white shadow-sm'
                               : slot.available
-                                ? 'border-blue-100 bg-white text-btk-blue hover:border-btk-blue hover:bg-blue-50'
+                                ? 'border-[#d9e5f2] bg-white text-[#102746] hover:border-btk-blue hover:bg-[#f5f9fe]'
                                 : reserved
-                                  ? 'cursor-not-allowed border-red-100 bg-red-50/70 text-red-700'
-                                  : 'cursor-not-allowed border-slate-100 bg-slate-50 text-gray-400'
+                                  ? 'cursor-not-allowed border-red-100 bg-red-50/60 text-red-700'
+                                  : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400'
                           }`}
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-base sm:text-lg">{slot.time}</span>
-                            <span className={`max-w-[62px] truncate rounded-full px-1.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] sm:max-w-none sm:px-2 sm:text-[10px] sm:tracking-[0.18em] ${
-                              slot.available
-                                ? 'bg-green-50 text-green-700'
-                                : reserved
-                                  ? 'bg-red-100 text-red-700 ring-1 ring-red-200'
-                                  : 'bg-gray-200 text-gray-500'
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-base font-black tabular-nums sm:text-lg ${active ? 'text-white' : ''}`}>{slot.time}</span>
+                            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[9px] font-bold ${
+                              active
+                                ? 'bg-white/15 text-white'
+                                : slot.available
+                                  ? 'bg-green-50 text-green-700'
+                                  : reserved
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-slate-200 text-slate-600'
                             }`}>
-                              {slot.available ? 'Libre' : slot.reason ? slot.reason : 'Occupé'}
+                              <span className={`h-1.5 w-1.5 rounded-full ${
+                                active ? 'bg-white' : slot.available ? 'bg-green-500' : reserved ? 'bg-red-500' : 'bg-slate-400'
+                              }`} />
+                              {slot.available ? 'Libre' : reserved ? 'Réservé' : 'Fermé'}
                             </span>
                           </div>
-                          <p className={`mt-2 hidden text-xs font-medium sm:mt-3 sm:block ${active ? 'text-blue-100' : 'text-gray-500'}`}>
-                            Cliquez pour sélectionner ce créneau.
+                          <p className={`mt-2 text-[10px] font-medium ${active ? 'text-blue-100' : 'text-slate-500'}`}>
+                            {active ? 'Créneau sélectionné' : slot.available ? 'Sélectionner' : slot.reason || 'Indisponible'}
                           </p>
                         </button>
                       )
@@ -795,8 +843,8 @@ export default function RendezVousPage() {
                 )}
               </section>
 
-              <aside className="min-w-0 rounded-[24px] border border-[#dbeaf8] bg-white/95 p-4 shadow-[0_30px_80px_-42px_rgba(0,101,161,0.24)] sm:rounded-[28px] sm:p-5 xl:sticky xl:top-6 xl:self-start">
-                <h2 className="text-xl font-black text-gray-950">Vos informations</h2>
+              <aside className="min-w-0 rounded-2xl border border-[#dfe7f1] bg-white p-4 shadow-sm sm:p-5 2xl:sticky 2xl:top-6 2xl:self-start">
+                <h2 className="text-xl font-black text-[#102746]">Vos informations</h2>
                 <div className="mt-4 space-y-3">
                   <input
                     className="btk-input"
