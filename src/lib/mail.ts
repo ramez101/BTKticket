@@ -43,6 +43,22 @@ function formatBookingDate(date: string, time: string) {
   return `${formattedDate} à ${time}`
 }
 
+function formatChargeAppointmentDate(date: string, time: string) {
+  const [year, month, day] = date.split('-').map(Number)
+  const dateValue = new Date(Date.UTC(year, month - 1, day, 12))
+  const formattedDate = new Intl.DateTimeFormat('fr-FR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Africa/Tunis',
+  }).format(dateValue)
+  const capitalizedDate = formattedDate.charAt(0).toLocaleUpperCase('fr-FR') + formattedDate.slice(1)
+  const formattedTime = time.replace(':', 'h')
+
+  return `${capitalizedDate} à ${formattedTime}`
+}
+
 function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, character => ({
     '&': '&amp;',
@@ -72,25 +88,8 @@ function escapeCalendarText(value: string) {
 function calendarDateTime(date: string, time: string, minutesToAdd = 0) {
   const [year, month, day] = date.split('-').map(Number)
   const [hours, minutes] = time.split(':').map(Number)
-  // Africa/Tunis is UTC+1. UTC dates make the event display correctly in Outlook.
   const value = new Date(Date.UTC(year, month - 1, day, hours - 1, minutes + minutesToAdd))
   return value.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
-}
-
-function calendarUtcNow() {
-  return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
-}
-
-function calendarUid(reference: string) {
-  return `btk-rdv-${reference.toLowerCase()}@btk.local`
-}
-
-function calendarOrganizerEmail() {
-  const configured = process.env.CALENDAR_ORGANIZER_EMAIL?.trim()
-  if (configured) return configured
-
-  const from = process.env.MAIL_FROM?.trim() || 'BTK Easy <rdv@btk.local>'
-  return from.match(/<([^>]+)>/)?.[1] || from
 }
 
 function createAppointmentCalendarEvent(input: ChargeAppointmentMailInput, method: 'REQUEST' | 'CANCEL') {
@@ -101,8 +100,10 @@ function createAppointmentCalendarEvent(input: ChargeAppointmentMailInput, metho
     input.subject ? `Objet : ${input.subject}` : '',
     `Reference : ${input.reference}`,
   ].filter(Boolean).join('\\n')
-  const title = `RDV BTK - ${input.customerName}`
-  const status = method === 'CANCEL' ? 'CANCELLED' : 'CONFIRMED'
+  const from = process.env.MAIL_FROM?.trim() || 'BTK Easy <rdv@btk.local>'
+  const organizerEmail = process.env.CALENDAR_ORGANIZER_EMAIL?.trim()
+    || from.match(/<([^>]+)>/)?.[1]
+    || from
 
   return [
     'BEGIN:VCALENDAR',
@@ -111,15 +112,15 @@ function createAppointmentCalendarEvent(input: ChargeAppointmentMailInput, metho
     `METHOD:${method}`,
     'CALSCALE:GREGORIAN',
     'BEGIN:VEVENT',
-    `UID:${calendarUid(input.reference)}`,
-    `DTSTAMP:${calendarUtcNow()}`,
+    `UID:btk-rdv-${input.reference.toLowerCase()}@btk.local`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')}`,
     `DTSTART:${calendarDateTime(input.date, input.time)}`,
     `DTEND:${calendarDateTime(input.date, input.time, 30)}`,
-    `SUMMARY:${escapeCalendarText(title)}`,
+    `SUMMARY:${escapeCalendarText(`RDV BTK - ${input.customerName}`)}`,
     `DESCRIPTION:${escapeCalendarText(customerDetails)}`,
     `LOCATION:${escapeCalendarText(input.agencyName)}`,
-    `STATUS:${status}`,
-    `ORGANIZER:MAILTO:${calendarOrganizerEmail()}`,
+    `STATUS:${method === 'CANCEL' ? 'CANCELLED' : 'CONFIRMED'}`,
+    `ORGANIZER:MAILTO:${organizerEmail}`,
     `ATTENDEE;CN=${escapeCalendarText(input.chargeName)};ROLE=REQ-PARTICIPANT;RSVP=TRUE:MAILTO:${input.chargeEmail}`,
     'END:VEVENT',
     'END:VCALENDAR',
@@ -127,14 +128,85 @@ function createAppointmentCalendarEvent(input: ChargeAppointmentMailInput, metho
   ].join('\r\n')
 }
 
-/**
- * Sends an Outlook-compatible calendar invitation or cancellation to the charge.
- * Outlook uses the stable UID to update/remove the same event from its calendar.
- */
+function createChargeAppointmentEmailTemplate(input: ChargeAppointmentMailInput, kind: 'confirmation' | 'cancellation', calendarInvite: boolean) {
+  const isCancellation = kind === 'cancellation'
+  const bookingDate = formatChargeAppointmentDate(input.date, input.time)
+  if (!isCancellation) {
+    const calendarMessage = calendarInvite
+      ? 'L’invitation à ajouter à votre calendrier Outlook est intégrée à ce courriel.'
+      : 'Ce rendez-vous a été ajouté automatiquement à votre calendrier Outlook.'
+    const details = [
+      ['📅', 'Date', bookingDate],
+      ['📍', 'Lieu', input.agencyName],
+      ['🔖', 'Référence', input.reference],
+    ] as const
+    const detailText = details.map(([icon, label, value]) => `${icon} ${label} : ${value}`).join('\n')
+    const detailHtml = details.map(([icon, label, value]) => `
+      <p style="margin:8px 0">${icon} <strong>${label} :</strong> ${escapeHtml(value)}</p>
+    `).join('')
+
+    return {
+      subject: `Nouveau rendez-vous BTK easy – ${input.reference}`,
+      text: [
+        `Bonjour ${input.chargeName},`,
+        '',
+        `Un nouveau rendez-vous vient de vous être attribué avec le client ${input.customerName}.`,
+        '',
+        detailText,
+        '',
+        calendarMessage,
+        '',
+        'Merci de prendre en compte ce nouveau rendez-vous.',
+        '',
+        'Cordialement,',
+        'BTK easy',
+      ].join('\n'),
+      html: `
+        <div style="font-family:Arial,sans-serif;color:#003a66;line-height:1.7">
+          <p>Bonjour <strong>${escapeHtml(input.chargeName)}</strong>,</p>
+          <p>Un nouveau rendez-vous vient de vous être attribué avec le client <strong>${escapeHtml(input.customerName)}</strong>.</p>
+          <div style="margin:20px 0">${detailHtml}</div>
+          <p>${calendarMessage}</p>
+          <p>Merci de prendre en compte ce nouveau rendez-vous.</p>
+          <p>Cordialement,<br>BTK easy</p>
+        </div>
+      `,
+    }
+  }
+
+  const action = 'a été annulé'
+  const calendarMessage = calendarInvite
+    ? 'Cette invitation met à jour votre calendrier Outlook et retire ce rendez-vous.'
+    : 'La mise à jour du calendrier a été effectuée automatiquement dans Outlook.'
+  const message = [
+    `Bonjour ${input.chargeName},`,
+    `Le rendez-vous ${input.reference} avec ${input.customerName} ${action}.`,
+    `Date : ${bookingDate}`,
+    `Agence : ${input.agencyName}`,
+    input.subject ? `Objet : ${input.subject}` : '',
+    calendarMessage,
+  ].filter(Boolean).join('\n')
+
+  return {
+    subject: `BTK Easy - RDV annulé (${input.reference})`,
+    text: message,
+    html: `
+      <div style="font-family:Arial,sans-serif;color:#003a66;line-height:1.7">
+        <p>Bonjour <strong>${escapeHtml(input.chargeName)}</strong>,</p>
+        <p>Le rendez-vous <strong>${escapeHtml(input.reference)}</strong> avec
+          <strong>${escapeHtml(input.customerName)}</strong> ${action}.</p>
+        <p>📅 ${escapeHtml(bookingDate)} à ${escapeHtml(input.agencyName)}</p>
+        ${input.subject ? `<p>Objet : ${escapeHtml(input.subject)}</p>` : ''}
+        <p>${calendarMessage}</p>
+      </div>
+    `,
+  }
+}
+
 export async function sendChargeAppointmentEmail(
   input: ChargeAppointmentMailInput,
   kind: 'confirmation' | 'cancellation',
-  options: { attachCalendar?: boolean } = {},
+  options: { calendarInvite?: boolean } = {},
 ): Promise<MailResult> {
   const recipient = input.chargeEmail?.trim()
   if (!recipient) return { sent: false, reason: 'missing_recipient' }
@@ -144,23 +216,9 @@ export async function sendChargeAppointmentEmail(
   const user = process.env.MAIL_USER?.trim()
   const pass = process.env.MAIL_PASSWORD?.trim()
   const from = process.env.MAIL_FROM?.trim() || 'BTK Easy <rdv@btk.local>'
-  const isCancellation = kind === 'cancellation'
-  const attachCalendar = options.attachCalendar ?? false
-  const bookingDate = formatBookingDate(input.date, input.time)
-  const action = isCancellation ? 'a été annulé' : 'est confirmé'
-  const calendarMethod = isCancellation ? 'CANCEL' : 'REQUEST'
-  const message = [
-    `Bonjour ${input.chargeName},`,
-    `Le rendez-vous ${input.reference} avec ${input.customerName} ${action}.`,
-    `Date : ${bookingDate}`,
-    `Agence : ${input.agencyName}`,
-    input.subject ? `Objet : ${input.subject}` : '',
-    attachCalendar
-      ? (isCancellation
-        ? 'La mise à jour jointe retire ce rendez-vous de votre calendrier Outlook.'
-        : 'L’invitation jointe ajoute ce rendez-vous à votre calendrier Outlook.')
-      : 'La synchronisation du calendrier se fait directement via Microsoft Graph lorsqu’Outlook est connecté.',
-  ].filter(Boolean).join('\n')
+  const calendarInvite = options.calendarInvite ?? false
+  const template = createChargeAppointmentEmailTemplate(input, kind, calendarInvite)
+  const calendarMethod = kind === 'cancellation' ? 'CANCEL' : 'REQUEST'
 
   const transporter = nodemailer.createTransport({
     host,
@@ -174,25 +232,11 @@ export async function sendChargeAppointmentEmail(
     await transporter.sendMail({
       from,
       to: recipient,
-      subject: `BTK Easy - RDV ${isCancellation ? 'annulé' : 'confirmé'} (${input.reference})`,
-      text: message,
-      html: `
-        <div style="font-family:Arial,sans-serif;color:#003a66;line-height:1.7">
-          <p>Bonjour <strong>${escapeHtml(input.chargeName)}</strong>,</p>
-          <p>Le rendez-vous <strong>${escapeHtml(input.reference)}</strong> avec <strong>${escapeHtml(input.customerName)}</strong> ${escapeHtml(action)}.</p>
-          <p>📅 ${escapeHtml(bookingDate)} à ${escapeHtml(input.agencyName)}</p>
-          ${input.subject ? `<p>Objet : ${escapeHtml(input.subject)}</p>` : ''}
-          <p>${attachCalendar
-            ? (isCancellation
-              ? 'La mise à jour jointe retire ce rendez-vous de votre calendrier Outlook.'
-              : 'L’invitation jointe ajoute ce rendez-vous à votre calendrier Outlook.')
-            : 'La synchronisation du calendrier se fait directement via Microsoft Graph lorsqu’Outlook est connecté.'}</p>
-        </div>
-      `,
-      icalEvent: attachCalendar ? {
-        method: calendarMethod,
+      ...template,
+      alternatives: calendarInvite ? [{
+        contentType: `text/calendar; method=${calendarMethod}; charset=utf-8`,
         content: createAppointmentCalendarEvent(input, calendarMethod),
-      } : undefined,
+      }] : undefined,
     })
     return { sent: true }
   } catch (error) {

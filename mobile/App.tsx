@@ -1,47 +1,822 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
   Animated,
+  BackHandler,
+  Dimensions,
   Easing,
   Image,
   KeyboardAvoidingView,
   Platform,
   Linking,
   Modal,
+  Appearance,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
+  Text as NativeText,
+  TextInput as NativeTextInput,
+  useColorScheme,
   useWindowDimensions,
-  View,
+  View as NativeView,
 } from 'react-native'
+import type { AlertButton, ColorValue, TextProps, ViewProps } from 'react-native'
+import type { ScrollViewInstance } from 'react-native'
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
+import Reanimated, {
+  Easing as ReanimatedEasing,
+  FadeInRight,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
-import Constants, { ExecutionEnvironment } from 'expo-constants'
+import { BlurTargetView, BlurView } from 'expo-blur'
+import { isRunningInExpoGo } from 'expo'
+import Constants from 'expo-constants'
+import { getLocales } from 'expo-localization'
 import * as Location from 'expo-location'
-import { Ionicons } from '@expo/vector-icons'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { COLORS, RADIUS, SHADOW, SPACING } from './theme'
 
 const APP_ICON = require('./assets/BTK.png')
 const SPLASH_ICON = require('./assets/icon.png')
-const MOBILE_BANNER_HEIGHT = 300
+const MOBILE_BANNER_HEIGHT = 240
 const MOBILE_AGENCIES_PER_PAGE = 10
+const SETTINGS_STORAGE_KEY = 'btk-easy:app-settings'
+
+type ThemePreference = 'light' | 'dark' | 'automatic'
+type AppLanguage = 'fr' | 'ar' | 'en'
+type AppSettings = {
+  theme: ThemePreference
+  language: AppLanguage
+}
+
+function getSystemLanguage(): AppLanguage {
+  const languageCode = getLocales()[0]?.languageCode?.toLowerCase()
+  if (languageCode === 'ar' || languageCode === 'en') return languageCode
+  return 'fr'
+}
+
+const DEFAULT_SETTINGS: AppSettings = { theme: 'automatic', language: getSystemLanguage() }
+let activeDarkMode = false
+let activeLanguage: AppLanguage = 'fr'
+const SettingsContext = createContext({
+  settings: DEFAULT_SETTINGS,
+  darkMode: false,
+  language: 'fr' as AppLanguage,
+})
+
+const ARABIC_TRANSLATIONS: Record<string, string> = {
+  'BTK Easy': 'BTK Easy',
+  'BTK EASY': 'BTK Easy',
+  BTK: 'BTK',
+  EASY: 'EASY',
+  'Services clients': 'خدمات الحرفاء',
+  'Service ouvert': 'الخدمة مفتوحة',
+  'Service fermé': 'الخدمة مغلقة',
+  NAVIGATION: 'التنقّل',
+  Accueil: 'الرئيسية',
+  Retour: 'رجوع',
+  'Ouvrir le menu': 'فتح القائمة',
+  'Fermer le menu': 'إغلاق القائمة',
+  'Que souhaitez-vous faire ?': 'ماذا تود أن تفعل؟',
+  'Situation des agences': 'حالة الوكالات',
+  'Prendre rendez-vous': 'حجز موعد',
+  'Prenez votre ticket': 'احصل على تذكرتك',
+  'Rendez-vous avec votre chargé': 'موعد مع مستشارك',
+  'Suivez votre agence': 'تابع وكالتك',
+  'Afficher les 5 agences les plus proches': 'عرض أقرب 5 وكالات',
+  "Afficher les 5 agences avec le moins d'attente": 'عرض 5 وكالات بأقل وقت انتظار',
+  'Afficher les 5 agences avec le moins d’attente': 'عرض 5 وكالات بأقل وقت انتظار',
+  'Localisation...': 'جارٍ تحديد الموقع...',
+  'Centrale': 'المركزية',
+  CENTRALE: 'المركزية',
+  '1 avant vous': 'شخص واحد قبلك',
+  CALENDRIER: 'التقويم',
+  'NUMÉRO APPELÉ': 'الرقم الجاري استدعاؤه',
+  'Guichet 3': 'الشباك 3',
+  'Fermer les horaires': 'إغلاق أوقات العمل',
+  'Mon ticket': 'تذكرتي',
+  'Création...': 'جارٍ الإنشاء...',
+  'Rechercher une agence': 'ابحث عن وكالة',
+  "Trouver l'agence la plus proche": 'اعثر على أقرب وكالة',
+  '2 · SERVICE': '2 · الخدمة',
+  '1 · AGENCE': '1 · الوكالة',
+  '2 · CONSEILLER': '2 · المستشار',
+  '3 · CRÉNEAU': '3 · الموعد',
+  'C’EST VOTRE TOUR !': 'حان دورك!',
+  Référence: 'المرجع',
+  'Écrans en direct': 'الشاشات مباشرة',
+  'Écran': 'الشاشة',
+  'EN COURS': 'قيد التنفيذ',
+  'Rappel de votre rendez-vous': 'تذكير بموعدك',
+  'Erreur': 'خطأ',
+  'Impossible de charger les chargés.': 'تعذر تحميل المستشارين.',
+  'Calendrier indisponible': 'التقويم غير متاح',
+  'Réessayez dans quelques instants.': 'أعد المحاولة بعد قليل.',
+  'Réservation impossible': 'تعذر إتمام الحجز',
+  'Annulation impossible': 'تعذر الإلغاء',
+  'Ticket impossible': 'تعذر إنشاء التذكرة',
+  'Service indisponible.': 'الخدمة غير متاحة.',
+  'Créneau indisponible.': 'الموعد غير متاح.',
+  'Réessayez plus tard.': 'أعد المحاولة لاحقاً.',
+  'Enregistrement impossible': 'تعذر حفظ الإعدادات',
+  'Vérifiez le stockage de l’appareil puis réessayez.': 'تحقق من مساحة التخزين في الجهاز ثم أعد المحاولة.',
+  'Lien indisponible': 'الرابط غير متاح',
+  'Vérifiez votre connexion Internet puis réessayez.': 'تحقق من اتصالك بالإنترنت ثم أعد المحاولة.',
+  'Autorisez la localisation pour afficher les 5 agences les plus proches.': 'اسمح بالوصول إلى الموقع لعرض أقرب 5 وكالات.',
+  "Autorisez la localisation pour trouver l’agence la plus proche.": 'اسمح بالوصول إلى الموقع للعثور على أقرب وكالة.',
+  "Autorisez la localisation pour trouver l'agence la plus proche.": 'اسمح بالوصول إلى الموقع للعثور على أقرب وكالة.',
+  'Vérifiez le GPS de votre téléphone puis réessayez.': 'تحقق من نظام تحديد المواقع في هاتفك ثم أعد المحاولة.',
+  'N’oubliez pas votre rendez-vous demain': 'لا تنسَ موعدك غداً',
+  "N'oubliez pas votre rendez-vous demain": 'لا تنسَ موعدك غداً',
+  'Votre rendez-vous BTK Easy est dans une heure': 'موعدك مع بي تي كاي إيزي بعد ساعة',
+  TICKET: 'تذكرة',
+  'EN DIRECT': 'مباشر',
+  'VOTRE TOUR APPROCHE': 'اقترب دورك',
+  Tous: 'الكل',
+  'Mes RDV': 'مواعيدي',
+  'Réservation...': 'جارٍ الحجز...',
+  RDV: 'موعد',
+  LIVE: 'مباشر',
+  '2 avant vous': 'شخصان قبلك',
+  '3 avant vous': 'ثلاثة أشخاص قبلك',
+  '4 avant vous': 'أربعة أشخاص قبلك',
+  '5 avant vous': 'خمسة أشخاص قبلك',
+  WAITING: 'في الانتظار',
+  CALLED: 'حان دورك',
+  SERVED: 'تمت الخدمة',
+  ABSENT: 'لم يحضر',
+  'Appel en cours': 'جارٍ النداء',
+  'Aucun appel en cours': 'لا يوجد نداء حالياً',
+  'Statut indisponible': 'الحالة غير متاحة',
+  'Connexion impossible': 'تعذر الاتصال',
+  'Activité indisponible.': 'النشاط غير متاح.',
+  'Une erreur est survenue.': 'حدث خطأ.',
+  'Autorisez les notifications pour retrouver vos tickets et rendez-vous sur cet appareil.': 'فعّل الإشعارات لمتابعة تذاكرك ومواعيدك على هذا الجهاز.',
+  'Activez les notifications pour retrouver vos tickets et rendez-vous sur cet appareil.': 'فعّل الإشعارات لمتابعة تذاكرك ومواعيدك على هذا الجهاز.',
+  'Tickets BTK Easy': 'تذاكر بي تي كاي إيزي',
+  'Appels de tickets': 'استدعاء التذاكر',
+  'Rendez-vous BTK Easy': 'مواعيد بي تي كاي إيزي',
+  'C’est votre tour !': 'حان دورك!',
+  'Terminé': 'انتهت الخدمة',
+  Absent: 'لم يحضر',
+  Confirmé: 'تم التأكيد',
+  'Votre visite, plus simple.': 'زيارتكم أصبحت أسهل.',
+  'Prendre un ticket': 'الحصول على تذكرة',
+  "Consultez l'attente et obtenez votre numéro.": 'تابع وقت الانتظار واحصل على رقمك.',
+  Ticket: 'تذكرة',
+  'Rendez-vous': 'موعد',
+  'Réservez un créneau avec un chargé.': 'احجز موعداً مع مستشار.',
+  'Voir les écrans': 'مشاهدة الشاشات',
+  'Suivez les numéros appelés en agence.': 'تابع الأرقام التي يتم استدعاؤها في الوكالة.',
+  'Mon activité': 'نشاطي',
+  'Retrouvez vos tickets et rendez-vous.': 'اعثر على تذاكرك ومواعيدك.',
+  Fermer: 'إغلاق',
+  'À propos': 'من نحن',
+  Contact: 'اتصل بنا',
+  Horaires: 'أوقات العمل',
+  'Horaires de travail': 'أوقات العمل',
+  'BANQUE TUNISO-KOWEITIENNE': 'البنك التونسي الكويتي',
+  'Agences plus proches': 'أقرب الوكالات',
+  Page: 'الصفحة',
+  'SUIVI EN TEMPS RÉEL': 'متابعة مباشرة',
+  'TICKET #': 'التذكرة رقم',
+  'Présentez-vous au': 'توجّه إلى',
+  'Veuillez vous présenter au guichet.': 'يرجى التوجّه إلى الشباك.',
+  'Votre position se met à jour automatiquement.': 'يتم تحديث موقعك تلقائياً.',
+  'Agence BTK': 'وكالة بي تي كاي',
+  'Agences disponibles': 'الوكالات المتاحة',
+  'EN ATTENTE': 'في الانتظار',
+  'En attente d’un appel': 'في انتظار الاستدعاء',
+  'ÉTAPE': 'المرحلة',
+  'à': 'في',
+  'avant vous': 'قبلك',
+  personne: 'شخص',
+  agences: 'وكالات',
+  'agence(s)': 'وكالات',
+  'en attente': 'في الانتظار',
+  'en attente · ~': 'في الانتظار · حوالي',
+  'ticket(s) en attente': 'تذاكر في الانتظار',
+  min: 'دقيقة',
+  'RENDEZ-VOUS': 'المواعيد',
+  'CONFIRMÉ': 'تم التأكيد',
+  Disponible: 'متاح',
+  SERVICE: 'الخدمة',
+  'Conservez ce code pour consulter ou annuler votre rendez-vous.': 'احتفظ بهذا الرمز للاطلاع على موعدك أو إلغائه.',
+  '08:00 - 16:30': '08:00 - 16:30',
+  'Rechercher une agence...': 'ابحث عن وكالة...',
+  'VOTRE BANQUE, PLUS PROCHE DE VOUS': 'بنككم أقرب إليكم',
+  'Moins d’attente': 'انتظار أقل',
+  "Moins d'attente": 'انتظار أقل',
+  'AGENCE SÉLECTIONNÉE': 'الوكالة المختارة',
+  'Choisir le service et obtenir votre numéro.': 'اختر الخدمة واحصل على رقمك.',
+  'Choisir un chargé et un créneau.': 'اختر مستشاراً وموعداً.',
+  'Présentez ce numéro lorsque votre tour est affiché à l’écran.': 'أظهر هذا الرقم عند ظهوره على الشاشة.',
+  "Présentez ce numéro lorsque votre tour est affiché à l'écran.": 'أظهر هذا الرقم عند ظهوره على الشاشة.',
+  'TICKET CONFIRMÉ': 'تم تأكيد التذكرة',
+  'VOTRE NUMÉRO': 'رقمك',
+  'Itinéraire vers l’agence': 'المسار إلى الوكالة',
+  'SUIVI EN DIRECT': 'متابعة مباشرة',
+  'Votre activité BTK Easy': 'نشاطك في بي تي كاي إيزي',
+  'Tickets et rendez-vous réunis au même endroit.': 'تذاكرك ومواعيدك في مكان واحد.',
+  TICKETS: 'التذاكر',
+  'Mes tickets': 'تذاكري',
+  'Aucun ticket actif': 'لا توجد تذاكر نشطة',
+  'Vos tickets en cours apparaîtront ici.': 'ستظهر تذاكرك الحالية هنا.',
+  'Historique des tickets': 'سجل التذاكر',
+  'Supprimer l’historique ?': 'حذف السجل؟',
+  'Les tickets actifs ne seront pas supprimés.': 'لن يتم حذف التذاكر النشطة.',
+  Supprimer: 'حذف',
+  'Suppression impossible': 'تعذر الحذف',
+  'Mes rendez-vous': 'مواعيدي',
+  'Aucun rendez-vous à venir': 'لا توجد مواعيد قادمة',
+  'Vos prochaines réservations apparaîtront ici.': 'ستظهر حجوزاتك القادمة هنا.',
+  'Rendez-vous passés': 'المواعيد السابقة',
+  'ATTENTE ESTIMÉE': 'الانتظار المتوقع',
+  'DERNIÈRE MISE À JOUR': 'آخر تحديث',
+  'Annuler le rendez-vous': 'إلغاء الموعد',
+  'Trouver l’agence la plus proche': 'اعثر على أقرب وكالة',
+  'Aucune agence ne correspond à votre recherche.': 'لا توجد وكالة تطابق بحثك.',
+  'BIENVENUE SUR BTK EASY': 'مرحباً بكم في بي تي كاي إيزي',
+  'Prenez un ticket et suivez votre attente depuis votre téléphone.': 'احصل على تذكرة وتابع وقت انتظارك من هاتفك.',
+  'CODE RENDEZ-VOUS': 'رمز الموعد',
+  'RENDEZ-VOUS BTK EASY': 'مواعيد بي تي كاي إيزي',
+  'Un rendez-vous, simplement.': 'موعد بكل بساطة.',
+  'Choisissez votre agence, votre conseiller et le créneau qui vous convient.': 'اختر وكالتك ومستشارك والموعد المناسب لك.',
+  'RENDEZ-VOUS CONFIRMÉ': 'تم تأكيد الموعد',
+  'Votre rendez-vous est bien enregistré.': 'تم تسجيل موعدك بنجاح.',
+  'CODE DE RÉSERVATION': 'رمز الحجز',
+  'Date et heure': 'التاريخ والوقت',
+  Client: 'الحريف',
+  'Bienvenue à': 'مرحباً بكم في',
+  'Notre Agence.': 'وكالتنا.',
+  'Actualisation en direct': 'تحديث مباشر',
+  'Voir l’écran': 'مشاهدة الشاشة',
+  'TICKET APPELÉ': 'التذكرة المستدعاة',
+  'Dernier passage appelé': 'آخر رقم تم استدعاؤه',
+  "FILE D'ATTENTE": 'قائمة الانتظار',
+  'Aucun ticket en attente': 'لا توجد تذاكر في الانتظار',
+  'La file est actuellement vide.': 'قائمة الانتظار فارغة حالياً.',
+  'Aucun numéro appelé pour le moment': 'لم يتم استدعاء أي رقم بعد',
+  'Mise à jour impossible': 'تعذّر التحديث',
+  'Actualisation...': 'جارٍ التحديث...',
+  'HORS HORAIRES DE TRAVAIL': 'خارج أوقات العمل',
+  'GUICHET FERMÉ': 'الشباك مغلق',
+  'Merci de votre confiance.': 'شكراً لثقتكم.',
+  Apparence: 'المظهر',
+  'Thème de l’application': 'مظهر التطبيق',
+  Clair: 'فاتح',
+  Sombre: 'داكن',
+  Automatique: 'تلقائي',
+  Langue: 'اللغة',
+  Français: 'الفرنسية',
+  العربية: 'العربية',
+  Ouvert: 'مفتوح',
+  Fermé: 'مغلق',
+  Lundi: 'الاثنين',
+  Mardi: 'الثلاثاء',
+  Mercredi: 'الأربعاء',
+  Jeudi: 'الخميس',
+  Vendredi: 'الجمعة',
+  Samedi: 'السبت',
+  Dimanche: 'الأحد',
+  'Choisissez une agence': 'اختر وكالة',
+  'Choisissez votre service': 'اختر الخدمة',
+  'Choisissez un chargé': 'اختر مستشاراً',
+  'Choisissez la date et l’heure': 'اختر التاريخ والوقت',
+  "Choisissez la date et l'heure": 'اختر التاريخ والوقت',
+  'Voir les agences': 'عرض الوكالات',
+  'Réserver maintenant': 'احجز الآن',
+  'Réserver un rendez-vous': 'حجز موعد',
+  'Agence sélectionnée': 'الوكالة المختارة',
+  'Prendre un rendez-vous': 'حجز موعد',
+  'Choisir une agence': 'اختر وكالة',
+  'Choisir un chargé': 'اختر مستشاراً',
+  'Rechercher un chargé...': 'ابحث عن مستشار...',
+  'Aucun chargé ne correspond à votre recherche.': 'لا يوجد مستشار يطابق بحثك.',
+  'Choisir un créneau': 'اختر موعداً',
+  'Nom complet': 'الاسم الكامل',
+  Téléphone: 'الهاتف',
+  'Email (optionnel)': 'البريد الإلكتروني (اختياري)',
+  'Sujet (optionnel)': 'الموضوع (اختياري)',
+  'Votre nom': 'اسمك',
+  'Votre numéro': 'رقمك',
+  'Motif du rendez-vous': 'سبب الموعد',
+  'Confirmer le rendez-vous': 'تأكيد الموعد',
+  'Rendez-vous confirmé': 'تم تأكيد الموعد',
+  'Conservez ce code pour consulter ou annuler le rendez-vous.': 'احتفظ بهذا الرمز للاطلاع على الموعد أو إلغائه.',
+  'Nouveau rendez-vous': 'موعد جديد',
+  Activité: 'النشاط',
+  'Suivi en direct': 'متابعة مباشرة',
+  'Suivez votre agence en temps réel.': 'تابع وكالتك مباشرة.',
+  'Consultez le numéro appelé et l’état de la file en quelques secondes.': 'اطّلع على الرقم الجاري استدعاؤه وحالة الانتظار.',
+  'Prendre un autre ticket': 'الحصول على تذكرة أخرى',
+  'Votre tour approche': 'اقترب دورك',
+  'Aucune agence disponible.': 'لا توجد وكالة متاحة.',
+  'Aucune agence ouverte.': 'لا توجد وكالة مفتوحة.',
+  'Aucun créneau disponible pour cette date.': 'لا يوجد موعد متاح في هذا التاريخ.',
+  'Service indisponible': 'الخدمة غير متاحة',
+  'Date indisponible': 'التاريخ غير متاح',
+  'Le service est disponible de 08:00 à 16:30.': 'الخدمة متاحة من 08:00 إلى 16:30.',
+  'Tickets en attente': 'التذاكر في الانتظار',
+  'En attente': 'في الانتظار',
+  'Avant vous': 'قبلك',
+  Minutes: 'دقائق',
+  'Générer mon ticket': 'إنشاء تذكرتي',
+  'Aucun rendez-vous prévu.': 'لا يوجد موعد مبرمج.',
+  'Page précédente': 'الصفحة السابقة',
+  'Page suivante': 'الصفحة التالية',
+  'Localisation refusée': 'تم رفض تحديد الموقع',
+  'Localisation indisponible': 'تحديد الموقع غير متاح',
+  Annuler: 'إلغاء',
+  'Annuler le rendez-vous ?': 'إلغاء الموعد؟',
+  'Garder': 'الاحتفاظ',
+  'Service de rendez-vous': 'خدمة المواعيد',
+  'Les détails de votre rendez-vous': 'تفاصيل موعدك',
+  'E-mail du client': 'البريد الإلكتروني للحريف',
+  'Prise de rendez-vous': 'حجز موعد',
+  'Le service est fermé pour le moment.': 'الخدمة مغلقة حالياً.',
+  'Services disponibles': 'الخدمات المتاحة',
+  'Caisse': 'الصندوق',
+  'Virement': 'تحويل',
+  'Crédit': 'قرض',
+  'Renseignement': 'استعلام',
+  'Chèque': 'شيك',
+  'Devise': 'عملة',
+}
+
+const ENGLISH_TRANSLATIONS: Record<string, string> = {
+  'BTK Easy': 'BTK Easy',
+  'BTK EASY': 'BTK Easy',
+  'Services clients': 'Customer services',
+  'Service ouvert': 'Service open',
+  'Service fermé': 'Service closed',
+  NAVIGATION: 'NAVIGATION',
+  Accueil: 'Home',
+  Retour: 'Back',
+  'Ouvrir le menu': 'Open menu',
+  'Fermer le menu': 'Close menu',
+  'Que souhaitez-vous faire ?': 'What would you like to do?',
+  'MES SERVICES': 'MY SERVICES',
+  'Situation des agences': 'Agency status',
+  'Prendre rendez-vous': 'Book an appointment',
+  'Prenez votre ticket': 'Get your ticket',
+  'Rendez-vous avec votre chargé': 'Appointment with your advisor',
+  'Suivez votre agence': 'Track your agency',
+  "Consultez l'attente et obtenez votre numéro.": 'Check the queue and get your number.',
+  'Consultez l’attente et obtenez votre numéro.': 'Check the queue and get your number.',
+  'Afficher les 5 agences les plus proches': 'Show the 5 nearest agencies',
+  "Afficher les 5 agences avec le moins d'attente": 'Show the 5 agencies with the shortest wait',
+  'Afficher les 5 agences avec le moins d’attente': 'Show the 5 agencies with the shortest wait',
+  'Localisation...': 'Locating...',
+  Centrale: 'Central',
+  CENTRALE: 'CENTRAL',
+  '1 avant vous': '1 person ahead',
+  CALENDRIER: 'CALENDAR',
+  'NUMÉRO APPELÉ': 'NOW CALLING',
+  'Guichet 3': 'Counter 3',
+  'Fermer les horaires': 'Close opening hours',
+  'Mon ticket': 'My ticket',
+  'Création...': 'Creating...',
+  'Rechercher une agence': 'Search for an agency',
+  "Trouver l'agence la plus proche": 'Find the nearest agency',
+  '2 · SERVICE': '2 · SERVICE',
+  '1 · AGENCE': '1 · AGENCY',
+  '2 · CONSEILLER': '2 · ADVISOR',
+  '3 · CRÉNEAU': '3 · TIME SLOT',
+  'C’EST VOTRE TOUR !': 'IT IS YOUR TURN!',
+  Référence: 'Reference',
+  'Écrans en direct': 'Live screens',
+  Écran: 'Screen',
+  'EN COURS': 'IN PROGRESS',
+  'Rappel de votre rendez-vous': 'Appointment reminder',
+  Erreur: 'Error',
+  'Impossible de charger les chargés.': 'Could not load advisors.',
+  'Calendrier indisponible': 'Calendar unavailable',
+  'Réessayez dans quelques instants.': 'Please try again shortly.',
+  'Réservation impossible': 'Booking failed',
+  'Annulation impossible': 'Cancellation failed',
+  'Ticket impossible': 'Could not create ticket',
+  'Service indisponible.': 'Service unavailable.',
+  'Créneau indisponible.': 'Time slot unavailable.',
+  'Réessayez plus tard.': 'Please try again later.',
+  'Enregistrement impossible': 'Could not save settings',
+  'Vérifiez le stockage de l’appareil puis réessayez.': 'Check your device storage and try again.',
+  'Lien indisponible': 'Link unavailable',
+  'Vérifiez votre connexion Internet puis réessayez.': 'Check your internet connection and try again.',
+  'Autorisez la localisation pour afficher les 5 agences les plus proches.': 'Allow location access to show the 5 nearest agencies.',
+  "Autorisez la localisation pour trouver l’agence la plus proche.": 'Allow location access to find the nearest agency.',
+  "Autorisez la localisation pour trouver l'agence la plus proche.": 'Allow location access to find the nearest agency.',
+  'Vérifiez le GPS de votre téléphone puis réessayez.': 'Check your phone GPS and try again.',
+  TICKET: 'TICKET',
+  'EN DIRECT': 'LIVE',
+  'VOTRE TOUR APPROCHE': 'YOUR TURN IS APPROACHING',
+  Tous: 'All',
+  'Mes RDV': 'My appointments',
+  'Réservation...': 'Booking...',
+  RDV: 'APPT',
+  LIVE: 'LIVE',
+  WAITING: 'WAITING',
+  CALLED: 'YOUR TURN',
+  SERVED: 'SERVED',
+  ABSENT: 'NO-SHOW',
+  'Appel en cours': 'Now calling',
+  'Aucun appel en cours': 'No active call',
+  'Statut indisponible': 'Status unavailable',
+  'Connexion impossible': 'Connection failed',
+  'Activité indisponible.': 'Activity unavailable.',
+  'Une erreur est survenue.': 'Something went wrong.',
+  'Autorisez les notifications pour retrouver vos tickets et rendez-vous sur cet appareil.': 'Allow notifications to follow your tickets and appointments on this device.',
+  'Activez les notifications pour retrouver vos tickets et rendez-vous sur cet appareil.': 'Enable notifications to follow your tickets and appointments on this device.',
+  'Tickets BTK Easy': 'BTK Easy tickets',
+  'Appels de tickets': 'Ticket calls',
+  'Rendez-vous BTK Easy': 'BTK Easy appointments',
+  'C’est votre tour !': 'It is your turn!',
+  Terminé: 'Completed',
+  Absent: 'No-show',
+  Confirmé: 'Confirmed',
+  'Votre visite, plus simple.': 'Your visit, made easier.',
+  'Prendre un ticket': 'Get a ticket',
+  Ticket: 'Ticket',
+  'Rendez-vous': 'Appointment',
+  'Réservez un créneau avec un chargé.': 'Book a time slot with an advisor.',
+  'Voir les écrans': 'View the screens',
+  'Suivez les numéros appelés en agence.': 'Follow the numbers being called at the agency.',
+  'Mon activité': 'My activity',
+  'Retrouvez vos tickets et rendez-vous.': 'View your tickets and appointments.',
+  Fermer: 'Close',
+  'À propos': 'About',
+  Contact: 'Contact',
+  Horaires: 'Opening hours',
+  'Horaires de travail': 'Opening hours',
+  'BANQUE TUNISO-KOWEITIENNE': 'TUNISIAN-KUWAITI BANK',
+  'Agences plus proches': 'Nearest agencies',
+  'SUIVI EN TEMPS RÉEL': 'LIVE TRACKING',
+  'TICKET #': 'TICKET #',
+  'Présentez-vous au': 'Please go to',
+  'Veuillez vous présenter au guichet.': 'Please go to the counter.',
+  'Votre position se met à jour automatiquement.': 'Your position updates automatically.',
+  'Agence BTK': 'BTK agency',
+  'Agences disponibles': 'Available agencies',
+  'EN ATTENTE': 'WAITING',
+  'En attente d’un appel': 'Waiting to be called',
+  'ÉTAPE': 'STEP',
+  'avant vous': 'ahead of you',
+  personne: 'person',
+  agences: 'agencies',
+  'agence(s)': 'agencies',
+  'en attente': 'waiting',
+  'ticket(s) en attente': 'tickets waiting',
+  min: 'min',
+  'RENDEZ-VOUS': 'APPOINTMENT',
+  'CONFIRMÉ': 'CONFIRMED',
+  Disponible: 'Available',
+  SERVICE: 'SERVICE',
+  'Conservez ce code pour consulter ou annuler votre rendez-vous.': 'Keep this code to view or cancel your appointment.',
+  'Rechercher une agence...': 'Search for an agency...',
+  'VOTRE BANQUE, PLUS PROCHE DE VOUS': 'YOUR BANK, CLOSER TO YOU',
+  'Moins d’attente': 'Shortest wait',
+  "Moins d'attente": 'Shortest wait',
+  'AGENCE SÉLECTIONNÉE': 'SELECTED AGENCY',
+  'Choisir le service et obtenir votre numéro.': 'Choose a service and get your number.',
+  'Choisir un chargé et un créneau.': 'Choose an advisor and a time slot.',
+  'Présentez ce numéro lorsque votre tour est affiché à l’écran.': 'Show this number when your turn appears on screen.',
+  "Présentez ce numéro lorsque votre tour est affiché à l'écran.": 'Show this number when your turn appears on screen.',
+  'TICKET CONFIRMÉ': 'TICKET CONFIRMED',
+  'VOTRE NUMÉRO': 'YOUR NUMBER',
+  'Itinéraire vers l’agence': 'Directions to the agency',
+  'Votre activité BTK Easy': 'Your BTK Easy activity',
+  'Tickets et rendez-vous réunis au même endroit.': 'Your tickets and appointments, all in one place.',
+  TICKETS: 'TICKETS',
+  'Mes tickets': 'My tickets',
+  'Aucun ticket actif': 'No active tickets',
+  'Vos tickets en cours apparaîtront ici.': 'Your active tickets will appear here.',
+  'Historique des tickets': 'Ticket history',
+  'Supprimer l’historique ?': 'Delete ticket history?',
+  'Les tickets actifs ne seront pas supprimés.': 'Active tickets will not be deleted.',
+  Supprimer: 'Delete',
+  'Suppression impossible': 'Could not delete history',
+  'Mes rendez-vous': 'My appointments',
+  'Aucun rendez-vous à venir': 'No upcoming appointments',
+  'Vos prochaines réservations apparaîtront ici.': 'Your upcoming bookings will appear here.',
+  'Rendez-vous passés': 'Past appointments',
+  'ATTENTE ESTIMÉE': 'ESTIMATED WAIT',
+  'DERNIÈRE MISE À JOUR': 'LAST UPDATED',
+  'Annuler le rendez-vous': 'Cancel appointment',
+  'Trouver l’agence la plus proche': 'Find the nearest agency',
+  'Aucune agence ne correspond à votre recherche.': 'No agencies match your search.',
+  'BIENVENUE SUR BTK EASY': 'WELCOME TO BTK EASY',
+  'Prenez un ticket et suivez votre attente depuis votre téléphone.': 'Get a ticket and track your wait from your phone.',
+  'CODE RENDEZ-VOUS': 'APPOINTMENT CODE',
+  'RENDEZ-VOUS BTK EASY': 'BTK EASY APPOINTMENT',
+  'Un rendez-vous, simplement.': 'Appointments, made simple.',
+  'Choisissez votre agence, votre conseiller et le créneau qui vous convient.': 'Choose your agency, advisor, and a time that suits you.',
+  'RENDEZ-VOUS CONFIRMÉ': 'APPOINTMENT CONFIRMED',
+  'Votre rendez-vous est bien enregistré.': 'Your appointment has been booked.',
+  'CODE DE RÉSERVATION': 'BOOKING CODE',
+  'Date et heure': 'Date and time',
+  Client: 'Customer',
+  'Bienvenue à': 'Welcome to',
+  'Notre Agence.': 'Our Agency.',
+  'Actualisation en direct': 'Live updates',
+  'Voir l’écran': 'View screen',
+  'TICKET APPELÉ': 'NOW CALLING',
+  'Dernier passage appelé': 'Last number called',
+  "FILE D'ATTENTE": 'QUEUE',
+  'Aucun ticket en attente': 'No tickets waiting',
+  'La file est actuellement vide.': 'The queue is currently empty.',
+  'Aucun numéro appelé pour le moment': 'No number called yet',
+  'Mise à jour impossible': 'Refresh failed',
+  'Actualisation...': 'Updating...',
+  'HORS HORAIRES DE TRAVAIL': 'OUTSIDE OPENING HOURS',
+  'GUICHET FERMÉ': 'COUNTER CLOSED',
+  'Merci de votre confiance.': 'Thank you for choosing us.',
+  Apparence: 'Appearance',
+  'Thème de l’application': 'App theme',
+  Clair: 'Light',
+  Sombre: 'Dark',
+  Automatique: 'Automatic',
+  Langue: 'Language',
+  Français: 'French',
+  العربية: 'Arabic',
+  English: 'English',
+  Ouvert: 'Open',
+  Fermé: 'Closed',
+  Lundi: 'Monday',
+  Mardi: 'Tuesday',
+  Mercredi: 'Wednesday',
+  Jeudi: 'Thursday',
+  Vendredi: 'Friday',
+  Samedi: 'Saturday',
+  Dimanche: 'Sunday',
+  'Choisissez une agence': 'Choose an agency',
+  'Choisissez votre service': 'Choose a service',
+  'Choisissez un chargé': 'Choose an advisor',
+  'Choisissez la date et l’heure': 'Choose a date and time',
+  "Choisissez la date et l'heure": 'Choose a date and time',
+  'Voir les agences': 'View agencies',
+  'Réserver maintenant': 'Book now',
+  'Réserver un rendez-vous': 'Book an appointment',
+  'Agence sélectionnée': 'Selected agency',
+  'Prendre un rendez-vous': 'Book an appointment',
+  'Choisir une agence': 'Choose an agency',
+  'Choisir un chargé': 'Choose an advisor',
+  'Rechercher un chargé...': 'Search for an advisor...',
+  'Aucun chargé ne correspond à votre recherche.': 'No advisors match your search.',
+  'Choisir un créneau': 'Choose a time slot',
+  'Nom complet': 'Full name',
+  Téléphone: 'Phone',
+  'Email (optionnel)': 'Email (optional)',
+  'Sujet (optionnel)': 'Subject (optional)',
+  'Votre nom': 'Your name',
+  'Votre numéro': 'Your phone number',
+  'Motif du rendez-vous': 'Appointment reason',
+  'Confirmer le rendez-vous': 'Confirm appointment',
+  'Rendez-vous confirmé': 'Appointment confirmed',
+  'Nouveau rendez-vous': 'New appointment',
+  Activité: 'Activity',
+  'Suivi en direct': 'Live tracking',
+  'Suivez votre agence en temps réel.': 'Track your agency in real time.',
+  'Consultez le numéro appelé et l’état de la file en quelques secondes.': 'Check the number being called and queue status at a glance.',
+  'Prendre un autre ticket': 'Get another ticket',
+  'Votre tour approche': 'Your turn is approaching',
+  'Aucune agence disponible.': 'No agencies available.',
+  'Aucune agence ouverte.': 'No agencies are open.',
+  'Aucun créneau disponible pour cette date.': 'No time slots available for this date.',
+  'Service indisponible': 'Service unavailable',
+  'Date indisponible': 'Date unavailable',
+  'Le service est disponible de 08:00 à 16:30.': 'The service is available from 08:00 to 16:30.',
+  'Tickets en attente': 'Tickets waiting',
+  'Mes services': 'My services',
+  'En attente': 'Waiting',
+  'Avant vous': 'Ahead of you',
+  Minutes: 'Minutes',
+  'Générer mon ticket': 'Get my ticket',
+  'Aucun rendez-vous prévu.': 'No appointments scheduled.',
+  'Page précédente': 'Previous page',
+  'Page suivante': 'Next page',
+  'Localisation refusée': 'Location permission denied',
+  'Localisation indisponible': 'Location unavailable',
+  Annuler: 'Cancel',
+  'Annuler le rendez-vous ?': 'Cancel this appointment?',
+  Garder: 'Keep',
+  'Service de rendez-vous': 'Appointment service',
+  'Les détails de votre rendez-vous': 'Your appointment details',
+  'E-mail du client': 'Customer email',
+  'Prise de rendez-vous': 'Appointment booking',
+  'Le service est fermé pour le moment.': 'The service is currently closed.',
+  'Services disponibles': 'Available services',
+  Caisse: 'Cash desk',
+  Virement: 'Transfer',
+  Crédit: 'Credit',
+  Renseignement: 'Information',
+  Chèque: 'Cheque',
+  Devise: 'Foreign currency',
+}
+
+function translate(value: string, language: AppLanguage) {
+  if (language === 'fr') return value
+  const leading = value.match(/^\s*/)?.[0] ?? ''
+  const trailing = value.match(/\s*$/)?.[0] ?? ''
+  const content = value.trim()
+  if (language === 'en') {
+    const exact = ENGLISH_TRANSLATIONS[content]
+    if (exact) return `${leading}${exact}${trailing}`
+    const patterns: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
+      [/^Bonjour (.+),?$/, match => `Hello ${match[1]}`],
+      [/^(.+) en attente · ~(.+) min$/, match => `${match[1]} waiting · ~${match[2]} min`],
+      [/^~(.+) min$/, match => `~${match[1]} min`],
+      [/^Page (\d+) \/ (\d+)$/, match => `Page ${match[1]} / ${match[2]}`],
+      [/^De (\d{2}:\d{2}) - (\d{2}:\d{2})$/, match => `From ${match[1]} to ${match[2]}`],
+      [/^Horaires\s*:\s*(.+)$/, match => `Opening hours: ${match[1]}`],
+      [/^(\d+) agences$/, match => `${match[1]} agencies`],
+      [/^(\d+) ticket\(s\) en attente$/, match => `${match[1]} tickets waiting`],
+      [/^(\d+) en attente$/, match => `${match[1]} waiting`],
+      [/^La plus proche : (.+) km$/, match => `Nearest: ${match[1]} km`],
+      [/^(\d+) personne$/, match => `${match[1]} ${Number(match[1]) === 1 ? 'person' : 'people'}`],
+      [/^Mis à jour il y a (\d+) s$/, match => `Updated ${match[1]} s ago`],
+      [/^(.+) · (.+)$/, match => `${translate(match[1], language)} · ${match[2]}`],
+      [/^Référence : (.+)$/, match => `Reference: ${match[1]}`],
+      [/^Code : (.+)$/, match => `Code: ${match[1]}`],
+      [/^Connexion impossible avec le serveur \((.+)\)\.(?: (.+))?$/, match => `Could not connect to server (${match[1]}).${match[2] ? ` ${match[2]}` : ''}`],
+    ]
+    for (const [pattern, replacement] of patterns) {
+      const match = content.match(pattern)
+      if (match) return `${leading}${replacement(match)}${trailing}`
+    }
+    const reminderTomorrow = content.match(/^N['’]oubliez pas votre rendez-vous demain à (.+) à l'agence BTK Easy\.$/)
+    if (reminderTomorrow) return `${leading}Your BTK Easy appointment is tomorrow at ${reminderTomorrow[1]}.${trailing}`
+    const reminderSoon = content.match(/^Votre rendez-vous BTK Easy est dans une heure, à (.+)\.$/)
+    if (reminderSoon) return `${leading}Your BTK Easy appointment is in one hour, at ${reminderSoon[1]}.${trailing}`
+    const ahead = content.match(/^(\d+) avant vous$/)
+    if (ahead) return `${leading}${ahead[1]} ${Number(ahead[1]) === 1 ? 'person' : 'people'} ahead${trailing}`
+    return `${leading}${content}${trailing}`
+  }
+  const exact = ARABIC_TRANSLATIONS[content]
+  if (exact) return `${leading}${exact}${trailing}`
+  const dynamicPatterns: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
+    [/^Bonjour (.+),?$/, match => `مرحباً ${match[1]}`],
+    [/^(.+) en attente · ~(.+) min$/, match => `${match[1]} في الانتظار · حوالي ${match[2]} دقيقة`],
+    [/^~(.+) min$/, match => `حوالي ${match[1]} دقيقة`],
+    [/^Page (\d+) \/ (\d+)$/, match => `الصفحة ${match[1]} / ${match[2]}`],
+    [/^De (\d{2}:\d{2}) - (\d{2}:\d{2})$/, match => `من ${match[1]} إلى ${match[2]}`],
+    [/^Horaires\s*:\s*(.+)$/, match => `أوقات العمل: ${match[1]}`],
+    [/^(\d+) agences$/, match => `${match[1]} وكالات`],
+    [/^(\d+) ticket\(s\) en attente$/, match => `${match[1]} تذاكر في الانتظار`],
+    [/^(\d+) en attente$/, match => `${match[1]} في الانتظار`],
+    [/^La plus proche : (.+) km$/, match => `الأقرب: ${match[1]} كم`],
+    [/^(\d+) personne$/, match => `${match[1]} شخص`],
+    [/^Mis à jour il y a (\d+) s$/, match => `تم التحديث منذ ${match[1]} ث`],
+    [/^(\d+) agences$/, match => `${match[1]} وكالات`],
+    [/^(.+) · (.+)$/, match => `${translate(match[1], language)} · ${match[2]}`],
+    [/^Référence : (.+)$/, match => `المرجع: ${match[1]}`],
+    [/^Code : (.+)$/, match => `الرمز: ${match[1]}`],
+    [/^Horaires\s*:\s*(\d{2}:\d{2}) - (\d{2}:\d{2})$/, match => `أوقات العمل: ${match[1]} - ${match[2]}`],
+    [/^Connexion impossible avec le serveur \((.+)\)\.(?: (.+))?$/, match => `تعذر الاتصال بالخادم (${match[1]}).${match[2] ? ` ${match[2]}` : ''}`],
+  ]
+  for (const [pattern, replacement] of dynamicPatterns) {
+    const match = content.match(pattern)
+    if (match) return `${leading}${replacement(match)}${trailing}`
+  }
+  const reminderTomorrow = content.match(/^N['’]oubliez pas votre rendez-vous demain à (.+) à l'agence BTK Easy\.$/)
+  if (reminderTomorrow) return `${leading}لا تنسَ موعدك غداً على الساعة ${reminderTomorrow[1]} في وكالة بي تي كاي إيزي.${trailing}`
+  const reminderSoon = content.match(/^Votre rendez-vous BTK Easy est dans une heure, à (.+)\.$/)
+  if (reminderSoon) return `${leading}موعدك مع بي تي كاي إيزي بعد ساعة، على الساعة ${reminderSoon[1]}.${trailing}`
+  const ahead = content.match(/^(\d+) avant vous$/)
+  if (ahead) {
+    const number = Number(ahead[1])
+    const count = ['صفر', 'شخص واحد', 'شخصان', 'ثلاثة أشخاص', 'أربعة أشخاص', 'خمسة أشخاص', 'ستة أشخاص'][number] ?? `${number} أشخاص`
+    return `${leading}${count} قبلك${trailing}`
+  }
+  const minutes = content.match(/^~?(\d+) min$/)
+  if (minutes) {
+    const amount = Number(minutes[1])
+    const label = amount === 1 ? 'دقيقة واحدة' : amount === 2 ? 'دقيقتان' : `${amount} دقائق`
+    return `${leading}حوالي ${label}${trailing}`
+  }
+  return `${leading}${content}${trailing}`
+}
+
+function showAlert(title: string, message: string, buttons?: AlertButton[]) {
+  Alert.alert(
+    translate(title, activeLanguage),
+    translate(message, activeLanguage),
+    buttons?.map(button => ({
+      ...button,
+      text: button.text ? translate(button.text, activeLanguage) : undefined,
+    })),
+  )
+}
+
+function themedColor(color: ColorValue | undefined, darkMode: boolean, type: 'text' | 'surface' | 'border') {
+  if (!darkMode || typeof color !== 'string') return color
+  const colors: Record<string, string> = type === 'text' ? {
+    [COLORS.text]: '#E7EEF6',
+    [COLORS.muted]: '#A5B5C5',
+    [COLORS.primary]: '#70BFF2',
+    [COLORS.dark]: '#A9CDE9',
+    [COLORS.deep]: '#D7EAF7',
+    '#0E2A55': '#C6DAEE',
+    '#0A3F9C': '#87B9EF',
+    '#526B82': '#A5B5C5',
+    '#7892B0': '#A5B5C5',
+  } : type === 'surface' ? {
+    [COLORS.background]: '#0B1724',
+    [COLORS.surface]: '#142638',
+    [COLORS.light]: '#1B3448',
+    '#F8FBFE': '#1B2E40',
+    '#EFF7FC': '#1A3042',
+    '#EEF7FF': '#1A3042',
+    '#F1F8FF': '#1B3448',
+    '#D9E8F3': '#33495D',
+    '#D8ECFF': '#28445D',
+  } : {
+    [COLORS.border]: '#34495D',
+    '#D7E7F2': '#34495D',
+    '#DCEAF4': '#34495D',
+    '#D5E7F5': '#34495D',
+    '#CFE3F0': '#34495D',
+  }
+  return colors[color.toUpperCase()] ?? colors[color] ?? color
+}
+
+const View = React.forwardRef<React.ComponentRef<typeof NativeView>, ViewProps>(({ style, ...props }, ref) => {
+  const { darkMode } = useContext(SettingsContext)
+  const flattenedStyle = StyleSheet.flatten(style)
+  const backgroundColor = themedColor(flattenedStyle?.backgroundColor, darkMode, 'surface')
+  const borderColor = themedColor(flattenedStyle?.borderColor, darkMode, 'border')
+  return (
+    <NativeView
+      {...props}
+      ref={ref}
+      style={darkMode ? [style, { backgroundColor, borderColor }] : style}
+    />
+  )
+})
+
+View.displayName = 'ThemedView'
+
+function Text({ children, style, ...props }: TextProps) {
+  const { language, darkMode } = useContext(SettingsContext)
+  const flattenedStyle = StyleSheet.flatten(style)
+  const localizedChildren = React.Children.map(children, child => (
+    typeof child === 'string' ? translate(child, language) : child
+  ))
+  const color = themedColor(flattenedStyle?.color, darkMode, 'text')
+  return (
+    <NativeText
+      {...props}
+      accessibilityLabel={props.accessibilityLabel ? translate(props.accessibilityLabel, language) : undefined}
+      style={[
+        style,
+        darkMode && color ? { color } : undefined,
+        language === 'ar' ? { writingDirection: 'rtl', textAlign: flattenedStyle?.textAlign ?? 'right' } : undefined,
+      ]}
+    >
+      {localizedChildren}
+    </NativeText>
+  )
+}
+
+function TextInput(props: React.ComponentProps<typeof NativeTextInput>) {
+  const { language, darkMode } = useContext(SettingsContext)
+  const leftToRightInput = ['email-address', 'phone-pad', 'numeric', 'number-pad', 'decimal-pad'].includes(props.keyboardType ?? '')
+  const flattenedStyle = StyleSheet.flatten(props.style)
+  const color = themedColor(flattenedStyle?.color, darkMode, 'text')
+  const backgroundColor = themedColor(flattenedStyle?.backgroundColor, darkMode, 'surface')
+  const borderColor = themedColor(flattenedStyle?.borderColor, darkMode, 'border')
+  return (
+    <NativeTextInput
+      {...props}
+      placeholder={props.placeholder ? translate(props.placeholder, language) : undefined}
+      accessibilityLabel={props.accessibilityLabel ? translate(props.accessibilityLabel, language) : undefined}
+      placeholderTextColor={darkMode ? '#8296AA' : props.placeholderTextColor}
+      style={[
+        props.style,
+        darkMode ? { color, backgroundColor, borderColor } : undefined,
+        language === 'ar' ? { writingDirection: leftToRightInput ? 'ltr' : 'rtl', textAlign: leftToRightInput ? 'left' : 'right' } : undefined,
+      ]}
+    />
+  )
+}
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined)
 
-// Expo Go 57 on Android currently crashes while importing expo-notifications
-// because ExpoTopicSubscriptionModule is not registered in that client. Keep
-// notifications available in development/release builds, but load the module
-// lazily so the app can still be previewed with Expo Go.
+// Load notifications lazily so Expo Go can preview the app without remote push support.
 let notificationsModule: typeof import('expo-notifications') | null = null
 
 function getNotificationsModule() {
   if (Platform.OS === 'web') return null
-  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
+  if (isRunningInExpoGo()) {
     console.warn('[BTK Easy] Les push distantes nécessitent une APK EAS ou un development build. Expo Go ne les prend pas en charge sur Android.')
     return null
   }
@@ -72,18 +847,8 @@ function getApiBaseUrl() {
   const configuredUrl = (
     Constants.expoConfig?.extra?.apiUrl
     || process.env.EXPO_PUBLIC_API_URL
-    || 'http://192.168.10.92:3000'
+    || 'http://192.168.10.94:3000'
   ).replace(/\/$/, '')
-  const metroHost = Constants.expoConfig?.hostUri?.split(':')[0]
-
-  // When running from Expo Go or a development build, use the same LAN host
-  // that serves Metro. This prevents a stale mobile/.env IP from hiding the
-  // agencies and charges on the phone after the router assigns a new address.
-  if (Platform.OS !== 'web' && metroHost) {
-    const port = configuredUrl.match(/:(\d+)$/)?.[1] || '3000'
-    return `http://${metroHost}:${port}`
-  }
-
   return configuredUrl
 }
 
@@ -114,6 +879,10 @@ type Charge = {
   agencyId: number
   agencyName?: string
   isActive: boolean
+}
+
+function getChargeInitials(name: string) {
+  return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join('').toUpperCase() || '—'
 }
 
 type Slot = { time: string; available: boolean; reason?: string }
@@ -178,12 +947,20 @@ type ScreenData = {
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-  })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error || 'Une erreur est survenue.')
+  const url = `${API_BASE_URL}${path}`
+  let response: Response
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    })
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    throw new Error(`Connexion impossible à ${url} : ${reason}`)
+  }
+  const data = await response.json().catch(() => null) as { error?: string } | null
+  if (!response.ok) throw new Error(data?.error || `Erreur HTTP ${response.status} sur ${path}.`)
+  if (data === null) throw new Error(`Réponse invalide du serveur sur ${path}.`)
   return data as T
 }
 
@@ -193,21 +970,21 @@ async function registerForPushNotificationsAsync() {
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('ticket-updates', {
-      name: 'Tickets BTK Easy',
+      name: translate('Tickets BTK Easy', activeLanguage),
       importance: Notifications.AndroidImportance.HIGH,
       sound: 'default',
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#27C5F5',
     })
     await Notifications.setNotificationChannelAsync('ticket-called', {
-      name: 'Appels de tickets',
+      name: translate('Appels de tickets', activeLanguage),
       importance: Notifications.AndroidImportance.MAX,
       sound: 'default',
       vibrationPattern: [0, 300, 200, 300],
       lightColor: '#27C5F5',
     })
     await Notifications.setNotificationChannelAsync('appointments', {
-      name: 'Rendez-vous BTK Easy',
+      name: translate('Rendez-vous BTK Easy', activeLanguage),
       importance: Notifications.AndroidImportance.HIGH,
       sound: 'default',
       vibrationPattern: [0, 250, 250, 250],
@@ -257,8 +1034,8 @@ async function scheduleAppointmentReminders(appointment: Appointment) {
 
   const appointmentAt = new Date(`${appointment.date}T${appointment.time}:00`)
   const reminders = [
-    { offset: 24 * 60 * 60 * 1000, title: 'Rappel de votre rendez-vous', body: `N'oubliez pas votre rendez-vous demain à ${appointment.time.replace(':', ' h ')} à l'agence BTK Easy.` },
-    { offset: 60 * 60 * 1000, title: 'Rappel de votre rendez-vous', body: `Votre rendez-vous BTK Easy est dans une heure, à ${appointment.time.replace(':', ' h ')}.` },
+    { offset: 24 * 60 * 60 * 1000, title: translate('Rappel de votre rendez-vous', activeLanguage), body: translate(`N'oubliez pas votre rendez-vous demain à ${appointment.time.replace(':', ' h ')} à l'agence BTK Easy.`, activeLanguage) },
+    { offset: 60 * 60 * 1000, title: translate('Rappel de votre rendez-vous', activeLanguage), body: translate(`Votre rendez-vous BTK Easy est dans une heure, à ${appointment.time.replace(':', ' h ')}.`, activeLanguage) },
   ]
 
   for (const reminder of reminders) {
@@ -353,7 +1130,8 @@ function parseDateValue(value: string | null | undefined) {
 function dateLabel(value: string | null | undefined) {
   const parsed = parseDateValue(value)
   if (!parsed) return 'Date indisponible'
-  return new Intl.DateTimeFormat('fr-FR', {
+  const locale = activeLanguage === 'ar' ? 'ar-TN' : activeLanguage === 'en' ? 'en-GB' : 'fr-FR'
+  return new Intl.DateTimeFormat(locale, {
     weekday: 'long', day: '2-digit', month: 'long', timeZone: 'Africa/Tunis',
   }).format(parsed)
 }
@@ -407,6 +1185,7 @@ function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
 
 function AnimatedSplashScreen({ onFinish }: { onFinish: () => void }) {
   const { width, height } = useWindowDimensions()
+  const { language } = useContext(SettingsContext)
   const logoOpacity = useRef(new Animated.Value(0)).current
   const logoScale = useRef(new Animated.Value(0.82)).current
   const ringProgress = useRef(new Animated.Value(0)).current
@@ -414,19 +1193,19 @@ function AnimatedSplashScreen({ onFinish }: { onFinish: () => void }) {
   const orbitProgress = useRef(new Animated.Value(0)).current
   const shimmerProgress = useRef(new Animated.Value(0)).current
   const revealProgress = useRef(new Animated.Value(0)).current
-  const titleLetters = useRef(Array.from('BTK Easy').map(() => new Animated.Value(0))).current
+  const titleOpacity = useRef(new Animated.Value(0)).current
   const [percent, setPercent] = useState(0)
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => undefined)
 
-    const titleAnimations = titleLetters.map((value, index) => Animated.timing(value, {
+    const titleAnimation = Animated.timing(titleOpacity, {
       toValue: 1,
-      duration: 280,
-      delay: 480 + index * 72,
+      duration: 520,
+      delay: 480,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
-    }))
+    })
 
     const ringAnimation = Animated.loop(Animated.sequence([
       Animated.timing(ringProgress, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
@@ -449,7 +1228,7 @@ function AnimatedSplashScreen({ onFinish }: { onFinish: () => void }) {
     Animated.parallel([
       Animated.timing(logoOpacity, { toValue: 1, duration: 650, useNativeDriver: true }),
       Animated.spring(logoScale, { toValue: 1, friction: 7, tension: 55, useNativeDriver: true }),
-      ...titleAnimations,
+      titleAnimation,
     ]).start()
     ringAnimation.start()
     pulseAnimation.start()
@@ -479,7 +1258,7 @@ function AnimatedSplashScreen({ onFinish }: { onFinish: () => void }) {
       orbitAnimation.stop()
       shimmerAnimation.stop()
     }
-  }, [onFinish, logoOpacity, logoScale, orbitProgress, pulseProgress, revealProgress, ringProgress, shimmerProgress, titleLetters])
+  }, [onFinish, logoOpacity, logoScale, orbitProgress, pulseProgress, revealProgress, ringProgress, shimmerProgress, titleOpacity])
 
   const logoRingScale = ringProgress.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1.18] })
   const logoRingOpacity = ringProgress.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.75, 0.18, 0] })
@@ -488,7 +1267,7 @@ function AnimatedSplashScreen({ onFinish }: { onFinish: () => void }) {
   const orbitRotation = orbitProgress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] })
   const shimmerX = shimmerProgress.interpolate({ inputRange: [0, 1], outputRange: [-180, 180] })
   const revealScale = revealProgress.interpolate({ inputRange: [0, 1], outputRange: [0.15, Math.max(width, height) / 18] })
-  const titleChars = Array.from('BTK Easy')
+  const appTitle = translate('BTK Easy', language)
 
   return (
     <View style={styles.splashRoot}>
@@ -519,7 +1298,18 @@ function AnimatedSplashScreen({ onFinish }: { onFinish: () => void }) {
         </View>
 
         <View style={styles.splashTitleRow}>
-          {titleChars.map((character, index) => <Animated.Text key={`${character}-${index}`} style={[styles.splashTitle, { opacity: titleLetters[index], transform: [{ translateY: titleLetters[index].interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }]}>{character === ' ' ? '\u00A0' : character}</Animated.Text>)}
+          <Animated.Text
+            style={[
+              styles.splashTitle,
+              {
+                opacity: titleOpacity,
+                writingDirection: language === 'ar' ? 'rtl' : 'ltr',
+                transform: [{ translateY: titleOpacity.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+              },
+            ]}
+          >
+            {appTitle}
+          </Animated.Text>
         </View>
         <Text style={styles.splashTagline}>VOTRE BANQUE, PLUS PROCHE DE VOUS</Text>
         <View style={styles.splashProgressArea}>
@@ -536,26 +1326,87 @@ function AnimatedSplashScreen({ onFinish }: { onFinish: () => void }) {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('home')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuProgress = useSharedValue(0)
+  const [hoursVisible, setHoursVisible] = useState(false)
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
+  const [languagePreferenceSet, setLanguagePreferenceSet] = useState(false)
   const [selectedAgencyForAction, setSelectedAgencyForAction] = useState<Agency | null>(null)
   const [splashVisible, setSplashVisible] = useState(true)
   const [pushToken, setPushToken] = useState<string | null>(null)
   const [activityRefreshKey, setActivityRefreshKey] = useState(0)
+  const [activityBadgeCount, setActivityBadgeCount] = useState(0)
   const [agencies, setAgencies] = useState<Agency[]>([])
   const [serviceOpen, setServiceOpen] = useState(true)
+  const [serviceHours, setServiceHours] = useState({ label: 'SERVICE', startTime: '08:00', endTime: '16:30' })
   const [loadingHome, setLoadingHome] = useState(true)
   const [connectionError, setConnectionError] = useState('')
+  const systemColorScheme = useColorScheme()
+  const darkMode = settings.theme === 'dark' || (settings.theme === 'automatic' && systemColorScheme === 'dark')
+  const blurTarget = useRef<React.ComponentRef<typeof View>>(null)
+  const appSurfaceStyle = useAnimatedStyle(() => ({
+    borderRadius: interpolate(menuProgress.value, [0, 1], [0, 34]),
+    transform: [
+      { translateX: interpolate(menuProgress.value, [0, 1], [0, -86]) },
+      { scale: interpolate(menuProgress.value, [0, 1], [1, 0.9]) },
+    ],
+  }))
+  const appDimStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(menuProgress.value, [0, 1], [0, 0.3]),
+  }))
+  activeDarkMode = darkMode
+  activeLanguage = settings.language
+
+  useEffect(() => {
+    menuProgress.value = withTiming(menuOpen ? 1 : 0, {
+      duration: menuOpen ? 550 : 380,
+      easing: ReanimatedEasing.out(ReanimatedEasing.cubic),
+    })
+  }, [menuOpen, menuProgress])
+
+  useEffect(() => {
+    let active = true
+    const loadSettings = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY)
+        if (!active || !saved) return
+        const parsed = JSON.parse(saved) as Partial<AppSettings> & { languagePreferenceSet?: boolean }
+        const hasSavedLanguagePreference = parsed.languagePreferenceSet === true
+          || parsed.language === 'ar'
+          || parsed.language === 'en'
+        setLanguagePreferenceSet(hasSavedLanguagePreference)
+        setSettings({
+          theme: parsed.theme === 'light' || parsed.theme === 'dark' ? parsed.theme : 'automatic',
+          language: hasSavedLanguagePreference && (parsed.language === 'fr' || parsed.language === 'ar' || parsed.language === 'en')
+            ? parsed.language
+            : getSystemLanguage(),
+        })
+      } catch (error) {
+        console.warn('[BTK Easy] Préférences impossibles à charger.', error)
+      }
+    }
+    void loadSettings()
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    Appearance.setColorScheme(settings.theme === 'automatic' ? 'unspecified' : settings.theme)
+  }, [settings.theme])
 
   const loadHome = useCallback(async () => {
     try {
       const [agencyData, serviceData] = await Promise.all([
         api<Agency[]>('/api/agency'),
-        api<{ open: boolean }>('/api/service-status', { cache: 'no-store' }),
+        api<{ open: boolean; hours?: { label: string; startTime: string; endTime: string } }>('/api/service-status', { cache: 'no-store' }),
       ])
       setAgencies(agencyData)
       setServiceOpen(Boolean(serviceData.open))
+      if (serviceData.hours) setServiceHours(serviceData.hours)
       setConnectionError('')
     } catch (error) {
-      setConnectionError(`Connexion impossible avec le serveur (${API_BASE_URL}).`)
+      const reason = error instanceof Error ? error.message : String(error)
+      console.warn('[BTK Easy] Chargement des agences impossible.', error)
+      setConnectionError(`Connexion impossible avec le serveur (${API_BASE_URL}). ${reason}`)
       setServiceOpen(false)
     } finally {
       setLoadingHome(false)
@@ -567,6 +1418,39 @@ export default function App() {
     const timer = setInterval(loadHome, 15000)
     return () => clearInterval(timer)
   }, [loadHome])
+
+  useEffect(() => {
+    let active = true
+    if (!pushToken) {
+      setActivityBadgeCount(0)
+      return () => { active = false }
+    }
+
+    const loadActivityBadge = async () => {
+      try {
+        const activity = await api<ActivityData>(`/api/activity?token=${encodeURIComponent(pushToken)}`)
+        if (active) {
+          setActivityBadgeCount(
+            activity.tickets.filter(ticket => ticket.active).length
+            + activity.appointments.filter(appointment => appointment.upcoming).length,
+          )
+        }
+      } catch (error) {
+        console.warn('[BTK Easy] Chargement du badge Activité impossible.', error)
+      }
+    }
+
+    void loadActivityBadge()
+    const timer = setInterval(() => void loadActivityBadge(), 15000)
+    return () => {
+      active = false
+      clearInterval(timer)
+    }
+  }, [pushToken, activityRefreshKey])
+
+  const refreshActivityBadge = useCallback(() => {
+    setActivityRefreshKey(value => value + 1)
+  }, [])
 
   useEffect(() => {
     const Notifications = getNotificationsModule()
@@ -587,7 +1471,7 @@ export default function App() {
     const receivedSubscription = Notifications.addNotificationReceivedListener(notification => {
       const data = notification.request.content.data
       if (typeof data?.type === 'string' && data.type.startsWith('ticket-')) {
-        setActivityRefreshKey(value => value + 1)
+        refreshActivityBadge()
       }
       if (data?.type === 'appointment-cancelled' && typeof data.reference === 'string') {
         void cancelAppointmentReminders(data.reference)
@@ -596,7 +1480,7 @@ export default function App() {
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data
       const type = data?.type
-      if (typeof type === 'string' && type.startsWith('ticket-')) setActivityRefreshKey(value => value + 1)
+      if (typeof type === 'string' && type.startsWith('ticket-')) refreshActivityBadge()
       if (data && type === 'appointment-cancelled' && typeof data.reference === 'string') {
         void cancelAppointmentReminders(data.reference)
       }
@@ -609,7 +1493,7 @@ export default function App() {
       receivedSubscription.remove()
       responseSubscription.remove()
     }
-  }, [])
+  }, [refreshActivityBadge])
 
   const activeAgencies = useMemo(() => agencies.filter(agency => agency.isActive !== false), [agencies])
   const finishSplash = useCallback(() => setSplashVisible(false), [])
@@ -620,26 +1504,95 @@ export default function App() {
   const navigateFromBottomBar = useCallback((nextTab: Tab) => {
     setSelectedAgencyForAction(null)
     setTab(nextTab)
+    setMenuOpen(false)
   }, [])
+  const updateSettings = useCallback(async (next: Partial<AppSettings>) => {
+    const updated = { ...settings, ...next }
+    const updatedLanguagePreferenceSet = languagePreferenceSet || next.language !== undefined
+    setSettings(updated)
+    setLanguagePreferenceSet(updatedLanguagePreferenceSet)
+    try {
+      await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
+        ...updated,
+        languagePreferenceSet: updatedLanguagePreferenceSet,
+      }))
+    } catch (error) {
+      setSettings(settings)
+      setLanguagePreferenceSet(languagePreferenceSet)
+      console.error('[BTK Easy] Préférences impossibles à enregistrer.', error)
+      showAlert(
+        settings.language === 'ar' ? 'تعذر حفظ الإعدادات' : settings.language === 'en' ? 'Could not save settings' : 'Enregistrement impossible',
+        settings.language === 'ar'
+          ? 'تحقق من مساحة التخزين ثم أعد المحاولة.'
+          : settings.language === 'en'
+            ? 'Check your device storage and try again.'
+            : 'Vérifiez le stockage de l’appareil puis réessayez.',
+      )
+      return
+    }
+  }, [languagePreferenceSet, settings])
 
   return (
-    <>
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar style="light" />
-        {tab === 'home' && <HomeScreen agencies={activeAgencies} serviceOpen={serviceOpen} loading={loadingHome} connectionError={connectionError} onNavigate={navigateFromHome} />}
-        {tab === 'activity' && <ActivityScreen pushToken={pushToken} refreshKey={activityRefreshKey} />}
-        {tab === 'ticket' && <TicketScreen agencies={activeAgencies} serviceOpen={serviceOpen} pushToken={pushToken} initialAgency={selectedAgencyForAction} onBack={() => { setSelectedAgencyForAction(null); setTab('home') }} />}
-        {tab === 'appointment' && <AppointmentScreen agencies={activeAgencies} pushToken={pushToken} initialAgency={selectedAgencyForAction} onBack={() => { setSelectedAgencyForAction(null); setTab('home') }} />}
-        {tab === 'screen' && <ScreenScreen agencies={activeAgencies} serviceOpen={serviceOpen} onBack={() => setTab('home')} />}
-        <BottomNavigationPro tab={tab} onChange={navigateFromBottomBar} />
-      </SafeAreaView>
-      {splashVisible && <AnimatedSplashScreen onFinish={finishSplash} />}
-    </>
+    <GestureHandlerRootView style={styles.appRoot}>
+      <SettingsContext.Provider value={{ settings, darkMode, language: settings.language }}>
+        <SafeAreaProvider>
+          <Reanimated.View style={[styles.appSurface, appSurfaceStyle]}>
+            <SafeAreaView style={[styles.safeArea, { direction: settings.language === 'ar' ? 'rtl' : 'ltr' }]}>
+              <StatusBar style={darkMode ? 'light' : 'dark'} />
+              <BlurTargetView ref={blurTarget} style={styles.appContent}>
+                {tab === 'home' && <HomeScreen agencies={activeAgencies} serviceOpen={serviceOpen} loading={loadingHome} connectionError={connectionError} onNavigate={navigateFromHome} onMenu={() => setMenuOpen(true)} />}
+                {tab === 'activity' && <ActivityScreen pushToken={pushToken} refreshKey={activityRefreshKey} onActivityUpdate={refreshActivityBadge} />}
+                {tab === 'ticket' && <TicketScreen agencies={activeAgencies} serviceOpen={serviceOpen} pushToken={pushToken} initialAgency={selectedAgencyForAction} onActivityUpdate={refreshActivityBadge} onBack={() => { setSelectedAgencyForAction(null); setTab('home') }} />}
+                {tab === 'appointment' && <AppointmentScreen agencies={activeAgencies} pushToken={pushToken} initialAgency={selectedAgencyForAction} onActivityUpdate={refreshActivityBadge} onBack={() => { setSelectedAgencyForAction(null); setTab('home') }} />}
+                {tab === 'screen' && <ScreenScreen agencies={activeAgencies} serviceOpen={serviceOpen} onBack={() => setTab('home')} />}
+                <BottomNavigationPro tab={tab} onChange={navigateFromBottomBar} activityCount={activityBadgeCount} />
+              </BlurTargetView>
+            </SafeAreaView>
+            <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.appDim, appDimStyle]} />
+          </Reanimated.View>
+          <SideMenu
+            visible={menuOpen}
+            current={tab}
+            serviceOpen={serviceOpen}
+            theme={settings.theme}
+            darkMode={darkMode}
+            language={settings.language}
+            blurTarget={blurTarget}
+            onClose={() => setMenuOpen(false)}
+            onSelect={navigateFromBottomBar}
+            onSelectTheme={theme => updateSettings({ theme })}
+            onSelectLanguage={language => updateSettings({ language })}
+            onOpenHours={() => setHoursVisible(true)}
+            onOpenLink={async url => {
+              try {
+                await Linking.openURL(url)
+              } catch (error) {
+                console.error('[BTK Easy] Impossible d’ouvrir le lien demandé.', error)
+                Alert.alert(
+                  settings.language === 'ar'
+                    ? 'تعذر فتح الرابط'
+                    : settings.language === 'en'
+                      ? 'Link unavailable'
+                      : 'Lien indisponible',
+                  settings.language === 'ar'
+                    ? 'تحقق من اتصالك بالإنترنت ثم أعد المحاولة.'
+                    : settings.language === 'en'
+                      ? 'Check your internet connection and try again.'
+                      : 'Vérifiez votre connexion Internet puis réessayez.',
+                )
+              }
+            }}
+          />
+          <ServiceHoursModal visible={hoursVisible} hours={serviceHours} onClose={() => setHoursVisible(false)} />
+          {splashVisible && <AnimatedSplashScreen onFinish={finishSplash} />}
+        </SafeAreaProvider>
+      </SettingsContext.Provider>
+    </GestureHandlerRootView>
   )
 }
 
-function HomeScreen({ agencies, serviceOpen, loading, connectionError, onNavigate }: { agencies: Agency[]; serviceOpen: boolean; loading: boolean; connectionError: string; onNavigate: (tab: Tab, agency?: Agency) => void }) {
-  const [menuOpen, setMenuOpen] = useState(false)
+function HomeScreen({ agencies, serviceOpen, loading, connectionError, onNavigate, onMenu }: { agencies: Agency[]; serviceOpen: boolean; loading: boolean; connectionError: string; onNavigate: (tab: Tab, agency?: Agency) => void; onMenu: () => void }) {
+  const { language } = useContext(SettingsContext)
   const [selectedAgency, setSelectedAgency] = useState<Agency | null>(null)
   const [liveMode, setLiveMode] = useState<'nearest' | 'wait'>('wait')
   const [position, setPosition] = useState<{ latitude: number; longitude: number } | null>(null)
@@ -670,21 +1623,21 @@ function HomeScreen({ agencies, serviceOpen, loading, connectionError, onNavigat
     try {
       const permission = await Location.requestForegroundPermissionsAsync()
       if (permission.status !== 'granted') {
-        Alert.alert('Localisation refusée', 'Autorisez la localisation pour afficher les 5 agences les plus proches.')
+        showAlert('Localisation refusée', 'Autorisez la localisation pour afficher les 5 agences les plus proches.')
         setLiveMode('wait')
         return
       }
       const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
       setPosition({ latitude: current.coords.latitude, longitude: current.coords.longitude })
     } catch {
-      Alert.alert('Localisation indisponible', 'Vérifiez le GPS de votre téléphone puis réessayez.')
+      showAlert('Localisation indisponible', 'Vérifiez le GPS de votre téléphone puis réessayez.')
       setLiveMode('wait')
     } finally {
       setLocationLoading(false)
     }
   }
 
-  const navigate = (tab: Tab) => { setMenuOpen(false); onNavigate(tab) }
+  const navigate = (tab: Tab) => onNavigate(tab)
   const openAgencyActions = (agency: Agency) => setSelectedAgency(agency)
   const chooseAgencyAction = (tab: 'ticket' | 'appointment') => {
     if (!selectedAgency) return
@@ -694,9 +1647,9 @@ function HomeScreen({ agencies, serviceOpen, loading, connectionError, onNavigat
   }
   return (
     <>
-      <AppHeader title="Accueil" onMenu={() => setMenuOpen(true)} />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-      <HomeHeroCarousel serviceOpen={serviceOpen} onNavigate={navigate} />
+      <AppHeader title="Accueil" onMenu={onMenu} />
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <HomeHeroCarousel key={language} onNavigate={navigate} />
       {!serviceOpen && <View accessibilityRole="alert" style={styles.serviceClosedBanner}>
         <View style={styles.serviceClosedIcon}><Ionicons name="time-outline" size={19} color="#FFFFFF" /></View>
         <View style={styles.serviceClosedCopy}><Text style={styles.serviceClosedTitle}>Service fermé</Text><Text style={styles.serviceClosedText}>Le service est disponible de 08:00 à 16:30.</Text></View>
@@ -704,9 +1657,9 @@ function HomeScreen({ agencies, serviceOpen, loading, connectionError, onNavigat
       {connectionError && <Notice text={connectionError} />}
 
       <SectionTitle eyebrow="MES SERVICES" title="Que souhaitez-vous faire ?" />
-      <ActionCard icon="▣" title="Prendre un ticket" description="Consultez l'attente et obtenez votre numéro." onPress={() => navigate('ticket')} primary />
-      <ActionCard icon="□" title="Prendre rendez-vous" description="Réservez un créneau avec un chargé." onPress={() => navigate('appointment')} />
-      <ActionCard icon="▤" title="Voir les écrans" description="Suivez les numéros appelés en agence." onPress={() => navigate('screen')} />
+      <ActionCard icon="ticket" title="Prendre un ticket" description="Consultez l'attente et obtenez votre numéro." onPress={() => navigate('ticket')} primary />
+      <ActionCard icon="calendar" title="Prendre rendez-vous" description="Réservez un créneau avec un chargé." onPress={() => navigate('appointment')} />
+      <ActionCard icon="desktop" title="Voir les écrans" description="Suivez les numéros appelés en agence." onPress={() => navigate('screen')} />
 
       <SectionTitle eyebrow="EN DIRECT" title="Situation des agences" />
       <View style={styles.liveFilters}>
@@ -756,59 +1709,108 @@ function HomeScreen({ agencies, serviceOpen, loading, connectionError, onNavigat
           </Pressable>
         </Pressable>
       </Modal>
-      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
-        <Pressable style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
-          <Pressable style={styles.menuPanel} onPress={event => event.stopPropagation()}>
-            <View style={styles.menuPanelHeader}><Image source={APP_ICON} style={styles.menuLogo} /><View><Text style={styles.menuPanelTitle}>BTK Easy</Text><Text style={styles.menuPanelSubtitle}>Services clients</Text></View></View>
-            <MenuItem label="Accueil" onPress={() => navigate('home')} />
-            <MenuItem label="Prendre un ticket" onPress={() => navigate('ticket')} />
-            <MenuItem label="Rendez-vous" onPress={() => navigate('appointment')} />
-            <MenuItem label="Voir les écrans" onPress={() => navigate('screen')} />
-            <Pressable style={styles.menuClose} onPress={() => setMenuOpen(false)}><Text style={styles.menuCloseText}>Fermer</Text></Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </>
   )
 }
 
 const HERO_SLIDES = [
   {
-    eyebrow: 'BIENVENUE SUR BTK EASY',
-    title: 'Votre visite, plus simple.',
-    text: 'Prenez un ticket, réservez un rendez-vous et suivez votre agence depuis votre téléphone.',
-    symbol: 'BTK',
+    eyebrow: 'TICKET',
+    title: 'Prenez votre ticket',
+    text: "Consultez l'attente et obtenez votre numéro.",
+    action: 'Prendre un ticket',
+    tab: 'ticket',
+    kind: 'ticket',
   },
   {
-    eyebrow: 'GAGNEZ DU TEMPS',
-    title: 'Préparez votre passage.',
-    text: 'Consultez l’attente en direct et choisissez le meilleur moment pour venir en agence.',
-    symbol: '01',
+    eyebrow: 'RENDEZ-VOUS',
+    title: 'Rendez-vous avec votre chargé',
+    text: 'Réservez un créneau avec un chargé.',
+    action: 'Prendre rendez-vous',
+    tab: 'appointment',
+    kind: 'appointment',
   },
   {
-    eyebrow: 'RENDEZ-VOUS SIMPLIFIÉ',
-    title: 'Un conseiller vous attend.',
-    text: 'Réservez un créneau adapté à votre besoin, avec une confirmation claire et rapide.',
-    symbol: '✓',
+    eyebrow: 'EN DIRECT',
+    title: 'Suivez votre agence',
+    text: 'Suivez les numéros appelés en agence.',
+    action: 'Voir les écrans',
+    tab: 'screen',
+    kind: 'screen',
   },
 ] as const
 
-function HomeHeroCarousel({ serviceOpen, onNavigate }: { serviceOpen: boolean; onNavigate: (tab: Tab) => void }) {
+function HomeHeroCarousel({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { width } = useWindowDimensions()
+  const { language } = useContext(SettingsContext)
+  const isRTL = language === 'ar'
   const carouselWidth = Math.max(280, width - SPACING.xl * 2)
-  const scrollRef = useRef<ScrollView>(null)
+  const scrollRef = useRef<ScrollViewInstance>(null)
   const [activeIndex, setActiveIndex] = useState(0)
+  const progress = useRef(new Animated.Value(0)).current
+  const floatProgress = useRef(new Animated.Value(0)).current
+  const pulseProgress = useRef(new Animated.Value(0)).current
+  const numberProgress = useRef(new Animated.Value(0)).current
+  const soundBars = useRef(Array.from({ length: 4 }, () => new Animated.Value(0.35))).current
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setActiveIndex(current => {
-        const next = (current + 1) % HERO_SLIDES.length
-        scrollRef.current?.scrollTo({ x: next * carouselWidth, animated: true })
-        return next
-      })
-    }, 6000)
-    return () => clearInterval(timer)
-  }, [carouselWidth])
+    const timer = setTimeout(() => {
+      const next = (activeIndex + 1) % HERO_SLIDES.length
+      scrollRef.current?.scrollTo({ x: next * carouselWidth, animated: true })
+      setActiveIndex(next)
+    }, 4600)
+    return () => clearTimeout(timer)
+  }, [activeIndex, carouselWidth])
+
+  useEffect(() => {
+    progress.setValue(0)
+    const animation = Animated.timing(progress, {
+      toValue: 1,
+      duration: 4600,
+      useNativeDriver: false,
+    })
+    animation.start()
+    return () => animation.stop()
+  }, [activeIndex, progress])
+
+  useEffect(() => {
+    const float = Animated.loop(Animated.sequence([
+      Animated.timing(floatProgress, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(floatProgress, { toValue: 0, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ]))
+    const pulse = Animated.loop(Animated.sequence([
+      Animated.timing(pulseProgress, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(pulseProgress, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]))
+    const number = Animated.loop(Animated.sequence([
+      Animated.timing(numberProgress, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true }),
+      Animated.timing(numberProgress, { toValue: 0, duration: 0, useNativeDriver: true }),
+    ]))
+    const equalizer = soundBars.map((bar, index) => Animated.loop(Animated.sequence([
+      Animated.delay(index * 150),
+      Animated.timing(bar, { toValue: 1, duration: 360, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(bar, { toValue: 0.35, duration: 360, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ])))
+    float.start()
+    pulse.start()
+    number.start()
+    equalizer.forEach(animation => animation.start())
+    return () => {
+      float.stop()
+      pulse.stop()
+      number.stop()
+      equalizer.forEach(animation => animation.stop())
+    }
+  }, [floatProgress, numberProgress, pulseProgress, soundBars])
+
+  const floatUp = floatProgress.interpolate({ inputRange: [0, 1], outputRange: [0, -7] })
+  const floatDown = floatProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 6] })
+  const pulseScale = pulseProgress.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1.18] })
+  const pulseOpacity = pulseProgress.interpolate({ inputRange: [0, 1], outputRange: [0.75, 0] })
+  const selectedNumberOpacity = numberProgress.interpolate({ inputRange: [0, 0.44, 0.5, 1], outputRange: [1, 1, 0, 0] })
+  const selectedNumberY = numberProgress.interpolate({ inputRange: [0, 0.44, 0.5, 1], outputRange: [0, 0, -40, -40] })
+  const nextNumberOpacity = numberProgress.interpolate({ inputRange: [0, 0.44, 0.5, 1], outputRange: [0, 0, 1, 1] })
+  const nextNumberY = numberProgress.interpolate({ inputRange: [0, 0.44, 0.5, 1], outputRange: [40, 40, 0, 0] })
 
   return (
     <View style={styles.heroCarousel}>
@@ -816,59 +1818,459 @@ function HomeHeroCarousel({ serviceOpen, onNavigate }: { serviceOpen: boolean; o
         ref={scrollRef}
         horizontal
         pagingEnabled
+        style={{ direction: 'ltr' }}
         showsHorizontalScrollIndicator={false}
         decelerationRate="fast"
+        scrollEventThrottle={16}
         onMomentumScrollEnd={event => {
           const next = Math.round(event.nativeEvent.contentOffset.x / carouselWidth)
           setActiveIndex(Math.max(0, Math.min(HERO_SLIDES.length - 1, next)))
         }}
       >
         {HERO_SLIDES.map((slide, index) => (
-          <View key={slide.eyebrow} style={[styles.homeHero, styles.heroSlide, index === 1 && styles.heroSlideDark, index === 2 && styles.heroSlideDeep, { width: carouselWidth }]}>
-            <View style={[styles.heroOrb, index === 1 && styles.heroOrbCyan, index === 2 && styles.heroOrbLight]} />
-            <View style={styles.heroOrbSmall} />
-            <View style={styles.heroContent}>
-              <Text style={styles.heroEyebrow}>{slide.eyebrow}</Text>
-              <View style={styles.heroAccentLine} />
-              <Text style={styles.heroTitle}>{slide.title}</Text>
-              <Text style={styles.heroText}>{slide.text}</Text>
-              {index === 0 && (
-                <View style={styles.statusLine}>
-                  <View style={[styles.statusDot, { backgroundColor: serviceOpen ? '#86efac' : '#fbbf24' }]} />
-                  <Text style={styles.statusText}>{serviceOpen ? 'Service ouvert' : 'Service fermé'}</Text>
+          <LinearGradient
+            key={slide.eyebrow}
+            colors={slide.kind === 'ticket'
+              ? ['#0A63E8', '#0A3FB8', '#082A8A']
+              : slide.kind === 'appointment'
+                ? ['#0A2A5E', '#0A4CAE']
+                : ['#0AA9EA', '#0A63E8']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.homeBanner, { width: carouselWidth, direction: 'ltr' }]}
+          >
+            <View style={styles.homeBannerGlow} />
+            <View style={styles.homeBannerRing} />
+            <View style={[styles.homeBannerCopy, isRTL && styles.homeBannerCopyRTL]}>
+              <View style={styles.homeBannerTag}>
+                <Animated.View style={[styles.homeBannerTagDot, {
+                  opacity: pulseProgress.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0.35, 1] }),
+                }]} />
+                <Text style={styles.homeBannerTagText}>{slide.eyebrow}</Text>
+              </View>
+              <Text style={styles.homeBannerTitle}>{slide.title}</Text>
+              <Text style={styles.homeBannerText}>{slide.text}</Text>
+            </View>
+
+            {slide.kind === 'ticket' && (
+              <View style={styles.bannerTicketArt} accessibilityElementsHidden>
+                <Animated.View style={[styles.bannerTicketRing, { opacity: pulseOpacity, transform: [{ scale: pulseScale }] }]} />
+                <Animated.View style={[styles.bannerTicketCard, { transform: [{ translateY: floatUp }, { rotate: isRTL ? '-7deg' : '7deg' }] }]}>
+                    <Text style={styles.bannerTicketAgency}>CENTRALE</Text>
+                    <Text style={styles.bannerTicketNumber}>2</Text>
+                    <Text style={styles.bannerTicketService}>Caisse</Text>
+                    <View style={styles.bannerTicketDivider} />
+                    <Text style={styles.bannerTicketWait}>1 avant vous</Text>
+                </Animated.View>
+                <Animated.View style={[styles.bannerTicketChip, { transform: [{ translateY: floatDown }] }]}>
+                  <MaterialCommunityIcons name="clock-outline" size={14} color="#0A3F9C" />
+                  <Text style={styles.bannerTicketChipText}>~3 min</Text>
+                </Animated.View>
+              </View>
+            )}
+
+            {slide.kind === 'appointment' && (
+              <View style={styles.bannerCalendarArt} accessibilityElementsHidden>
+                <Animated.View style={[styles.bannerCalendarCard, { transform: [{ translateY: floatUp }, { rotate: isRTL ? '6deg' : '-6deg' }] }]}>
+                  <View style={styles.bannerCalendarHeader}>
+                    <Text style={styles.bannerCalendarHeaderText}>CALENDRIER</Text>
+                  </View>
+                  <View style={styles.bannerCalendarGrid}>
+                    {Array.from({ length: 21 }, (_, day) => (
+                      <View key={day} style={styles.bannerCalendarDayWrap}>
+                        {day === 9 && <Animated.View style={[styles.bannerCalendarDayPulse, { opacity: pulseOpacity, transform: [{ scale: pulseScale }] }]} />}
+                        <Animated.View style={[
+                          styles.bannerCalendarDay,
+                          day === 9 && styles.bannerCalendarDaySelected,
+                          day === 9 && { transform: [{ scale: pulseProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) }] },
+                        ]} />
+                      </View>
+                    ))}
+                  </View>
+                </Animated.View>
+                <Animated.View style={[styles.bannerCalendarCheck, {
+                  opacity: pulseProgress.interpolate({ inputRange: [0, 0.35, 1], outputRange: [1, 1, 0.82] }),
+                  transform: [{ scale: pulseProgress.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0.86, 1, 0.94] }) }],
+                }]}>
+                  <MaterialCommunityIcons name="check" size={25} color="#FFFFFF" />
+                </Animated.View>
+              </View>
+            )}
+
+            {slide.kind === 'screen' && (
+              <View style={styles.bannerScreenArt} accessibilityElementsHidden>
+                <View style={styles.bannerSoundWave}>
+                  {[10, 20, 14, 24].map((height, bar) => (
+                    <Animated.View
+                      key={bar}
+                      style={[
+                        styles.bannerSoundBar,
+                        {
+                          height,
+                          opacity: soundBars[bar].interpolate({ inputRange: [0.35, 1], outputRange: [0.55, 1] }),
+                          transform: [{ scaleY: soundBars[bar] }],
+                        },
+                      ]}
+                    />
+                  ))}
                 </View>
-              )}
-              {index === 1 && (
-                <Pressable accessibilityRole="button" accessibilityLabel="Voir les agences" style={styles.heroAction} onPress={() => onNavigate('ticket')}>
-                  <Text style={styles.heroActionText}>Voir les agences</Text><Text style={styles.heroActionChevron}>›</Text>
-                </Pressable>
-              )}
-              {index === 2 && (
-                <Pressable accessibilityRole="button" accessibilityLabel="Réserver un rendez-vous" style={styles.heroAction} onPress={() => onNavigate('appointment')}>
-                  <Text style={styles.heroActionText}>Réserver maintenant</Text><Text style={styles.heroActionChevron}>›</Text>
-                </Pressable>
-              )}
-            </View>
-            <View style={styles.heroVisual} accessibilityElementsHidden>
-              <View style={styles.heroVisualRing} />
-              <View style={styles.heroVisualBadge}><Text style={styles.heroVisualSymbol}>{slide.symbol}</Text><Text style={styles.heroVisualLabel}>EASY</Text></View>
-            </View>
-          </View>
+                <Animated.View style={[styles.bannerScreenFrame, { transform: [{ translateY: floatUp }, { rotate: isRTL ? '-5deg' : '5deg' }] }]}>
+                  <Text style={styles.bannerScreenLabel}>NUMÉRO APPELÉ</Text>
+                  <View style={styles.bannerScreenNumberWindow}>
+                    <Animated.Text style={[styles.bannerScreenNumber, { opacity: selectedNumberOpacity, transform: [{ translateY: selectedNumberY }] }]}>1</Animated.Text>
+                    <Animated.Text style={[styles.bannerScreenNumber, styles.bannerScreenNextNumber, { opacity: nextNumberOpacity, transform: [{ translateY: nextNumberY }] }]}>2</Animated.Text>
+                  </View>
+                  <Text style={styles.bannerScreenCounter}>Guichet 3</Text>
+                </Animated.View>
+                <View style={styles.bannerScreenStand} />
+              </View>
+            )}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={slide.action}
+              style={({ pressed }) => [
+                styles.homeBannerAction,
+                { left: 18, right: undefined, direction: 'ltr' },
+                pressed && styles.homeBannerActionPressed,
+              ]}
+              onPress={() => onNavigate(slide.tab)}
+            >
+              {isRTL && <MaterialCommunityIcons name="arrow-left" size={17} color="#0A3F9C" />}
+              <Text numberOfLines={1} style={[styles.homeBannerActionText, isRTL && styles.homeBannerActionTextRTL]}>{slide.action}</Text>
+              {!isRTL && <MaterialCommunityIcons name="arrow-right" size={17} color="#0A3F9C" />}
+            </Pressable>
+          </LinearGradient>
         ))}
       </ScrollView>
       <View style={styles.heroDots} accessibilityLabel={`Bannière ${activeIndex + 1} sur ${HERO_SLIDES.length}`}>
-        {HERO_SLIDES.map((slide, index) => <View key={slide.eyebrow} style={[styles.heroDot, index === activeIndex && styles.heroDotActive]} />)}
+        {HERO_SLIDES.map((slide, index) => (
+          <View key={slide.eyebrow} style={[styles.heroDot, index === activeIndex && styles.heroDotActive]}>
+            {index === activeIndex && (
+              <Animated.View
+                style={[
+                  styles.heroDotProgress,
+                  {
+                    width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+                  },
+                ]}
+              />
+            )}
+          </View>
+        ))}
       </View>
     </View>
   )
 }
 
-function MenuItem({ label, onPress }: { label: string; onPress: () => void }) {
-  return <Pressable accessibilityRole="menuitem" accessibilityLabel={label} onPress={onPress} style={styles.menuItem}><Text style={styles.menuItemText}>{label}</Text><Text style={styles.menuItemChevron}>›</Text></Pressable>
+const SIDE_MENU_WIDTH = Math.min(318, Dimensions.get('window').width * 0.84)
+const SIDE_MENU_ITEMS: Array<{
+  key: Tab
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name']
+  title: string
+  subtitle: string
+}> = [
+  { key: 'home', icon: 'home-outline', title: 'Accueil', subtitle: 'Votre visite, plus simple.' },
+  { key: 'ticket', icon: 'ticket-confirmation-outline', title: 'Prendre un ticket', subtitle: "Consultez l'attente et obtenez votre numéro." },
+  { key: 'appointment', icon: 'calendar-month-outline', title: 'Rendez-vous', subtitle: 'Réservez un créneau avec un chargé.' },
+  { key: 'screen', icon: 'television-play', title: 'Voir les écrans', subtitle: 'Suivez les numéros appelés en agence.' },
+]
+
+function SideMenu({
+  visible,
+  current,
+  serviceOpen,
+  theme,
+  darkMode,
+  language,
+  blurTarget,
+  onClose,
+  onSelect,
+  onSelectTheme,
+  onSelectLanguage,
+  onOpenHours,
+  onOpenLink,
+}: {
+  visible: boolean
+  current: Tab
+  serviceOpen: boolean
+  theme: ThemePreference
+  darkMode: boolean
+  language: AppLanguage
+  blurTarget: React.RefObject<React.ComponentRef<typeof View> | null>
+  onClose: () => void
+  onSelect: (tab: Tab) => void
+  onSelectTheme: (theme: ThemePreference) => void
+  onSelectLanguage: (language: AppLanguage) => void
+  onOpenHours: () => void
+  onOpenLink: (url: string) => void
+}) {
+  const insets = useSafeAreaInsets()
+  const [mounted, setMounted] = useState(visible)
+  const x = useSharedValue(SIDE_MENU_WIDTH)
+  const palette = darkMode ? {
+    gradient: ['#0A2A5E', '#0A4CAE', '#0A63E8'] as const,
+    title: '#FFFFFF',
+    subtitle: '#B9D8FF',
+    muted: '#9FC4F5',
+    itemTitle: '#FFFFFF',
+    itemSubtitle: '#B4D2F7',
+    selectedBackground: 'rgba(255,255,255,0.16)',
+    selectedBorder: 'rgba(255,255,255,0.24)',
+    iconBackground: 'rgba(255,255,255,0.12)',
+    iconActive: '#12AEF2',
+    sectionBorder: 'rgba(255,255,255,0.18)',
+    settingLabel: '#D5E7FF',
+    choiceText: '#FFFFFF',
+    choiceBorder: 'rgba(255,255,255,0.72)',
+    radioSelected: '#FFFFFF',
+    quickLinkBorder: 'rgba(255,255,255,0.45)',
+    quickLinkBackground: 'rgba(255,255,255,0.1)',
+    controlBackground: 'rgba(255,255,255,0.14)',
+    controlBorder: 'rgba(255,255,255,0.2)',
+    bank: '#8FB6EA',
+    scrim: 'rgba(3,12,32,0.55)',
+  } : {
+    gradient: ['#FFFFFF', '#F3F8FC', '#EAF5FC'] as const,
+    title: '#142B45',
+    subtitle: '#526B82',
+    muted: '#52708A',
+    itemTitle: '#142B45',
+    itemSubtitle: '#64748B',
+    selectedBackground: 'rgba(0,102,164,0.10)',
+    selectedBorder: 'rgba(0,102,164,0.24)',
+    iconBackground: 'rgba(0,102,164,0.09)',
+    iconActive: '#0066A4',
+    sectionBorder: '#DFE7EF',
+    settingLabel: '#526B82',
+    choiceText: '#142B45',
+    choiceBorder: '#7890A4',
+    radioSelected: '#0066A4',
+    quickLinkBorder: 'rgba(0,102,164,0.35)',
+    quickLinkBackground: 'rgba(0,102,164,0.05)',
+    controlBackground: 'rgba(0,102,164,0.07)',
+    controlBorder: 'rgba(0,102,164,0.2)',
+    bank: '#64748B',
+    scrim: 'rgba(3,12,32,0.55)',
+  }
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true)
+      x.value = withTiming(0, { duration: 480, easing: ReanimatedEasing.out(ReanimatedEasing.cubic) })
+    } else {
+      x.value = withTiming(SIDE_MENU_WIDTH, { duration: 380, easing: ReanimatedEasing.out(ReanimatedEasing.cubic) }, finished => {
+        if (finished) runOnJS(setMounted)(false)
+      })
+    }
+  }, [visible, x])
+
+  useEffect(() => {
+    if (!visible) return
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose()
+      return true
+    })
+    return () => subscription.remove()
+  }, [visible, onClose])
+
+  const pan = Gesture.Pan()
+    .enabled(visible)
+    .activeOffsetX(12)
+    .failOffsetY([-14, 14])
+    .onUpdate(event => {
+      x.value = Math.min(SIDE_MENU_WIDTH, Math.max(0, event.translationX))
+    })
+    .onEnd(event => {
+      if (event.translationX > SIDE_MENU_WIDTH * 0.3 || event.velocityX > 700) {
+        runOnJS(onClose)()
+      } else {
+        x.value = withTiming(0, { duration: 250 })
+      }
+    })
+
+  const panelStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }))
+  const scrimStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(x.value, [0, SIDE_MENU_WIDTH], [1, 0]),
+  }))
+
+  if (!mounted) return null
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <Reanimated.View style={[StyleSheet.absoluteFill, scrimStyle]}>
+        <BlurView
+          blurTarget={blurTarget}
+          blurMethod="dimezisBlurView"
+          tint="dark"
+          intensity={24}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: palette.scrim }]} />
+        <Pressable style={styles.sideMenuScrimPressable} onPress={onClose} accessibilityLabel="Fermer le menu" />
+      </Reanimated.View>
+
+      <GestureDetector gesture={pan}>
+        <Reanimated.View
+          style={[
+            styles.sideMenuPanel,
+            {
+              width: SIDE_MENU_WIDTH,
+              top: insets.top,
+              bottom: insets.bottom,
+            },
+            panelStyle,
+          ]}
+          accessibilityViewIsModal
+        >
+          <LinearGradient
+            colors={palette.gradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0.4, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+
+          <View style={[styles.sideMenuHeader, { paddingTop: 24 }]}>
+            <Image source={SPLASH_ICON} style={styles.sideMenuLogo} />
+            <View style={styles.sideMenuBrand}>
+              <Text style={[styles.sideMenuTitle, { color: palette.title }]}>BTK Easy</Text>
+              <Text style={[styles.sideMenuSubtitle, { color: palette.subtitle }]}>Services clients</Text>
+            </View>
+            <Pressable onPress={onClose} style={[styles.sideMenuCloseIcon, { backgroundColor: palette.controlBackground }]} accessibilityRole="button" accessibilityLabel="Fermer le menu">
+              <MaterialCommunityIcons name="close" size={20} color={palette.title} />
+            </Pressable>
+          </View>
+
+          <View style={[styles.sideMenuStatus, !serviceOpen && styles.sideMenuStatusOff]}>
+            <View style={[styles.sideMenuStatusDot, !serviceOpen && styles.sideMenuStatusDotOff]} />
+            <Text style={[styles.sideMenuStatusText, !serviceOpen && styles.sideMenuStatusTextOff]}>
+              {serviceOpen ? 'Service ouvert' : 'Service fermé'}
+            </Text>
+          </View>
+
+          <Text style={[styles.sideMenuLabel, { color: palette.muted }]}>NAVIGATION</Text>
+          <ScrollView
+            style={styles.sideMenuScroll}
+            contentContainerStyle={styles.sideMenuScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.sideMenuItems}>
+              {SIDE_MENU_ITEMS.map((item, index) => {
+                const active = item.key === current
+                return (
+                  <Reanimated.View key={item.key} entering={FadeInRight.delay(140 + index * 60).duration(450)}>
+                    <Pressable
+                      onPress={() => {
+                        onSelect(item.key)
+                        onClose()
+                      }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={item.title}
+                      style={({ pressed }) => [
+                        styles.sideMenuItem,
+                        active && [styles.sideMenuItemActive, { backgroundColor: palette.selectedBackground, borderColor: palette.selectedBorder }],
+                        pressed && styles.sideMenuItemPressed,
+                      ]}
+                    >
+                      {active && <View style={styles.sideMenuActiveBar} />}
+                      <View style={[styles.sideMenuItemIcon, { backgroundColor: palette.iconBackground }, active && { backgroundColor: palette.iconActive }]}>
+                        <MaterialCommunityIcons name={item.icon} size={24} color={active ? '#FFFFFF' : darkMode ? '#FFFFFF' : '#0066A4'} />
+                      </View>
+                      <View style={styles.sideMenuItemCopy}>
+                        <Text style={[styles.sideMenuItemTitle, { color: palette.itemTitle }]}>{item.title}</Text>
+                        <Text style={[styles.sideMenuItemSubtitle, { color: palette.itemSubtitle }]}>{item.subtitle}</Text>
+                      </View>
+                      <MaterialCommunityIcons name="chevron-right" size={20} color={darkMode ? 'rgba(255,255,255,0.55)' : '#7890A4'} />
+                    </Pressable>
+                  </Reanimated.View>
+                )
+              })}
+            </View>
+
+            <View style={[styles.sideMenuSettings, { borderTopColor: palette.sectionBorder }]}>
+              <Text style={[styles.sideMenuSectionTitle, { color: palette.title }]}>Apparence</Text>
+              <Text style={[styles.sideMenuSettingLabel, { color: palette.settingLabel }]}>Thème de l’application</Text>
+              <View style={styles.sideMenuChoices}>
+                {([
+                  ['light', 'Clair', 'white-balance-sunny'],
+                  ['dark', 'Sombre', 'moon-waning-crescent'],
+                  ['automatic', 'Automatique', 'theme-light-dark'],
+                ] as const).map(([value, label, icon]) => (
+                  <Pressable
+                    key={value}
+                    onPress={() => onSelectTheme(value)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: theme === value }}
+                    style={[
+                      styles.sideMenuChoice,
+                      theme === value && [styles.sideMenuChoiceSelected, { backgroundColor: palette.selectedBackground }],
+                    ]}
+                  >
+                    <MaterialCommunityIcons name={icon} size={17} color={palette.choiceText} />
+                    <Text style={[styles.sideMenuChoiceText, { color: palette.choiceText }]}>{label}</Text>
+                    <View style={[styles.sideMenuRadio, { borderColor: palette.choiceBorder }]}>
+                      {theme === value && <View style={[styles.sideMenuRadioSelected, { backgroundColor: palette.radioSelected }]} />}
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={[styles.sideMenuSettingLabel, styles.sideMenuLanguageLabel, { color: palette.settingLabel }]}>Langue</Text>
+              <View style={styles.sideMenuLanguageRow}>
+                {([
+                  ['fr', 'Français'],
+                  ['ar', 'العربية'],
+                  ['en', 'English'],
+                ] as const).map(([value, label]) => (
+                  <Pressable
+                    key={value}
+                    onPress={() => onSelectLanguage(value)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: language === value }}
+                    style={[
+                      styles.sideMenuLanguageOption,
+                      language === value && [styles.sideMenuLanguageSelected, { backgroundColor: palette.selectedBackground }],
+                    ]}
+                  >
+                    <View style={[styles.sideMenuRadio, { borderColor: palette.choiceBorder }]}>
+                      {language === value && <View style={[styles.sideMenuRadioSelected, { backgroundColor: palette.radioSelected }]} />}
+                    </View>
+                    <Text style={[styles.sideMenuChoiceText, { color: palette.choiceText }]}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.sideMenuQuickLinks}>
+              <Pressable style={[styles.sideMenuQuickLink, { borderColor: palette.quickLinkBorder, backgroundColor: palette.quickLinkBackground }]} onPress={() => { onClose(); onOpenLink('https://www.btkbank.com/') }}>
+                <Text style={[styles.sideMenuQuickLinkText, { color: palette.title }]}>À propos</Text>
+              </Pressable>
+              <Pressable style={[styles.sideMenuQuickLink, { borderColor: palette.quickLinkBorder, backgroundColor: palette.quickLinkBackground }]} onPress={() => { onClose(); onOpenLink('https://www.btkbank.com/site/fr/contact.php?id_article=38&objet=1') }}>
+                <Text style={[styles.sideMenuQuickLinkText, { color: palette.title }]}>Contact</Text>
+              </Pressable>
+              <Pressable style={[styles.sideMenuQuickLink, { borderColor: palette.quickLinkBorder, backgroundColor: palette.quickLinkBackground }]} onPress={() => { onClose(); onOpenHours() }}>
+                <Text style={[styles.sideMenuQuickLinkText, { color: palette.title }]}>Horaires</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+
+          <View style={[styles.sideMenuFooter, { paddingBottom: 18 }]}>
+            <Pressable onPress={onClose} style={[styles.sideMenuCloseButton, { backgroundColor: palette.controlBackground, borderColor: palette.controlBorder }]} accessibilityRole="button">
+              <Text style={[styles.sideMenuCloseText, { color: palette.title }]}>Fermer</Text>
+            </Pressable>
+            <Text style={[styles.sideMenuBank, { color: palette.bank }]}>BANQUE TUNISO-KOWEITIENNE</Text>
+          </View>
+        </Reanimated.View>
+      </GestureDetector>
+    </View>
+  )
 }
 
-function ActionCard({ icon, title, description, onPress, primary = false }: { icon: string; title: string; description: string; onPress: () => void; primary?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${description}`} onPress={onPress} style={({ pressed }) => [styles.actionCard, primary && styles.primaryCard, pressed && styles.pressed]}><View style={[styles.actionIcon, primary && styles.primaryIcon]}><Text style={[styles.actionIconText, primary && styles.primaryIconText]}>{icon}</Text></View><View style={styles.actionCopy}><Text style={[styles.actionTitle, primary && styles.primaryCardText]}>{title}</Text><Text style={[styles.actionDescription, primary && styles.primaryCardMuted]}>{description}</Text></View><Text style={[styles.chevron, primary && styles.primaryCardText]}>›</Text></Pressable>
+function ActionCard({ icon, title, description, onPress, primary = false }: { icon: React.ComponentProps<typeof Ionicons>['name']; title: string; description: string; onPress: () => void; primary?: boolean }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${description}`} onPress={onPress} style={({ pressed }) => [styles.actionCard, primary && styles.primaryCard, pressed && styles.pressed]}>{primary && <LinearGradient colors={['#0878FF', '#0754D8', '#063FB5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}<View style={[styles.actionIcon, primary && styles.primaryIcon]}><Ionicons name={icon} size={22} color={primary ? '#FFFFFF' : COLORS.primary} /></View><View style={styles.actionCopy}><Text style={[styles.actionTitle, primary && styles.primaryCardText]}>{title}</Text><Text style={[styles.actionDescription, primary && styles.primaryCardMuted]}>{description}</Text></View><Text style={[styles.chevron, primary && styles.primaryCardText]}>›</Text></Pressable>
 }
 
 function Stat({ value, label }: { value: string; label: string }) {
@@ -893,7 +2295,7 @@ function LegacyTicketScreen({ agencies, serviceOpen, onBack }: { agencies: Agenc
       const data = await api<Ticket>('/api/ticket', { method: 'POST', body: JSON.stringify({ agencyId: selectedAgency.id, service, notificationMode: 'guest' }) })
       setTicket(data)
     } catch (error) {
-      Alert.alert('Ticket impossible', error instanceof Error ? error.message : 'Service indisponible.')
+      showAlert('Ticket impossible', error instanceof Error ? error.message : 'Service indisponible.')
     } finally {
       setLoading(false)
     }
@@ -953,22 +2355,29 @@ type ActivityFilter = 'all' | 'appointments' | 'tickets'
 function formatActivityDate(date: string, time?: string) {
   const parsed = new Date(`${date}T${time || '12:00'}:00`)
   if (Number.isNaN(parsed.getTime())) return `${date}${time ? ` · ${time}` : ''}`
-  return `${new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }).format(parsed)}${time ? ` · ${time}` : ''}`
+  const locale = activeLanguage === 'ar' ? 'ar-TN' : activeLanguage === 'en' ? 'en-GB' : 'fr-FR'
+  return `${new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'short' }).format(parsed)}${time ? ` · ${time}` : ''}`
 }
 
-function ActivityScreen({ pushToken, refreshKey }: { pushToken: string | null; refreshKey: number }) {
+function ActivityScreen({ pushToken, refreshKey, onActivityUpdate }: { pushToken: string | null; refreshKey: number; onActivityUpdate: () => void }) {
+  const { darkMode } = useContext(SettingsContext)
   const [filter, setFilter] = useState<ActivityFilter>('all')
   const [activity, setActivity] = useState<ActivityData>({ tickets: [], appointments: [], updatedAt: '' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [deleteHistoryVisible, setDeleteHistoryVisible] = useState(false)
+  const [deletingHistory, setDeletingHistory] = useState(false)
+  const [deleteHistoryError, setDeleteHistoryError] = useState('')
   const cacheLoaded = useRef(false)
+  const requestInFlight = useRef(false)
 
-  const loadActivity = useCallback(async (showLoading = false) => {
+  const loadActivity = useCallback(async () => {
     if (!pushToken) {
       setLoading(false)
       return
     }
-    if (showLoading) setLoading(true)
+    if (requestInFlight.current) return
+    requestInFlight.current = true
     const cacheKey = `btk-easy-activity:${pushToken}`
     try {
       if (!cacheLoaded.current) {
@@ -976,26 +2385,30 @@ function ActivityScreen({ pushToken, refreshKey }: { pushToken: string | null; r
         if (cached) setActivity(JSON.parse(cached) as ActivityData)
         cacheLoaded.current = true
       }
-      const data = await api<ActivityData>(`/api/activity?token=${encodeURIComponent(pushToken)}`)
+      const data = await api<ActivityData>(`/api/activity?token=${encodeURIComponent(pushToken)}`, { cache: 'no-store' })
       setActivity(data)
       setError('')
       await AsyncStorage.setItem(cacheKey, JSON.stringify(data))
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Activité indisponible.')
     } finally {
+      requestInFlight.current = false
       setLoading(false)
     }
   }, [pushToken])
 
   useEffect(() => {
     cacheLoaded.current = false
-    void loadActivity(true)
-    const timer = setInterval(() => void loadActivity(), 10000)
+  }, [pushToken])
+
+  useEffect(() => {
+    void loadActivity()
+    const timer = setInterval(() => void loadActivity(), 3000)
     return () => clearInterval(timer)
   }, [loadActivity, refreshKey])
 
   async function cancelAppointment(appointment: ActivityAppointment) {
-    Alert.alert('Annuler le rendez-vous ?', `${appointment.title} · ${formatActivityDate(appointment.date, appointment.time)}`, [
+    showAlert('Annuler le rendez-vous ?', `${appointment.title} · ${formatActivityDate(appointment.date, appointment.time)}`, [
       { text: 'Garder', style: 'cancel' },
       {
         text: 'Annuler',
@@ -1003,13 +2416,35 @@ function ActivityScreen({ pushToken, refreshKey }: { pushToken: string | null; r
         onPress: async () => {
           try {
             await api(`/api/appointments/${appointment.id}`, { method: 'DELETE' })
-            await loadActivity()
+            onActivityUpdate()
           } catch (cancelError) {
-            Alert.alert('Annulation impossible', cancelError instanceof Error ? cancelError.message : 'Réessayez plus tard.')
+            showAlert('Annulation impossible', cancelError instanceof Error ? cancelError.message : 'Réessayez plus tard.')
           }
         },
       },
     ])
+  }
+
+  function confirmDeleteTicketHistory() {
+    if (!pushToken) return
+    setDeleteHistoryError('')
+    setDeleteHistoryVisible(true)
+  }
+
+  async function deleteTicketHistory() {
+    if (!pushToken || deletingHistory) return
+    setDeletingHistory(true)
+    setDeleteHistoryError('')
+    try {
+      await api(`/api/activity?token=${encodeURIComponent(pushToken)}`, { method: 'DELETE' })
+      setDeleteHistoryVisible(false)
+      await loadActivity()
+      onActivityUpdate()
+    } catch (deleteError) {
+      setDeleteHistoryError(deleteError instanceof Error ? deleteError.message : 'Réessayez plus tard.')
+    } finally {
+      setDeletingHistory(false)
+    }
   }
 
   const activeTickets = activity.tickets.filter(ticket => ticket.active)
@@ -1022,7 +2457,7 @@ function ActivityScreen({ pushToken, refreshKey }: { pushToken: string | null; r
   return (
     <>
       <AppHeader title="Activité" />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.activityHero}>
           <Text style={styles.activityEyebrow}>SUIVI EN DIRECT</Text>
           <Text style={styles.activityTitle}>Votre activité BTK Easy</Text>
@@ -1051,10 +2486,6 @@ function ActivityScreen({ pushToken, refreshKey }: { pushToken: string | null; r
           {activeTickets.length === 0 && !loading
             ? <View style={styles.activityEmpty}><Ionicons name="ticket-outline" size={28} color={COLORS.primary} /><Text style={styles.activityEmptyTitle}>Aucun ticket actif</Text><Text style={styles.activityEmptyText}>Vos tickets en cours apparaîtront ici.</Text></View>
             : activeTickets.map(ticket => <ActivityTicketCard key={ticket.id} ticket={ticket} />)}
-          {pastTickets.length > 0 && <>
-            <Text style={styles.activitySubheading}>Historique des tickets</Text>
-            {pastTickets.map(ticket => <ActivityTicketCard key={ticket.id} ticket={ticket} />)}
-          </>}
         </>}
 
         {showAppointments && <>
@@ -1067,30 +2498,153 @@ function ActivityScreen({ pushToken, refreshKey }: { pushToken: string | null; r
             {pastAppointments.map(appointment => <ActivityAppointmentCard key={appointment.id} appointment={appointment} />)}
           </>}
         </>}
+
+        {showTickets && pastTickets.length > 0 && <>
+          <View style={styles.activityHistoryHeader}>
+            <Text style={styles.activitySubheading}>Historique des tickets</Text>
+            <Pressable
+              onPress={confirmDeleteTicketHistory}
+              accessibilityRole="button"
+              accessibilityLabel={translate('Supprimer l’historique ?', activeLanguage)}
+              style={styles.activityHistoryDelete}
+            >
+              <Ionicons name="trash-outline" size={19} color="#DC2626" />
+            </Pressable>
+          </View>
+          {pastTickets.map(ticket => <ActivityTicketCard key={ticket.id} ticket={ticket} />)}
+        </>}
       </ScrollView>
+      <Modal
+        visible={deleteHistoryVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!deletingHistory) setDeleteHistoryVisible(false)
+        }}
+      >
+        <View style={styles.activityConfirmOverlay}>
+          <View style={[styles.activityConfirmCard, darkMode && styles.activityConfirmCardDark]}>
+            <View style={styles.activityConfirmIcon}>
+              <Ionicons name={deleteHistoryError ? 'alert-circle-outline' : 'trash-outline'} size={24} color={deleteHistoryError ? COLORS.alert : COLORS.error} />
+            </View>
+            <Text style={[styles.activityConfirmTitle, darkMode && styles.activityConfirmTitleDark]}>
+              {deleteHistoryError ? 'Suppression impossible' : 'Supprimer l’historique ?'}
+            </Text>
+            <Text style={[styles.activityConfirmMessage, darkMode && styles.activityConfirmMessageDark]}>
+              {deleteHistoryError || 'Les tickets actifs ne seront pas supprimés.'}
+            </Text>
+            <View style={styles.activityConfirmActions}>
+              {!deleteHistoryError && <Pressable
+                onPress={() => setDeleteHistoryVisible(false)}
+                disabled={deletingHistory}
+                style={({ pressed }) => [styles.activityConfirmButton, styles.activityConfirmCancel, darkMode && styles.activityConfirmCancelDark, pressed && styles.pressed]}
+              >
+                <Text style={[styles.activityConfirmCancelText, darkMode && styles.activityConfirmCancelTextDark]}>Annuler</Text>
+              </Pressable>}
+              <Pressable
+                onPress={deleteHistoryError ? () => setDeleteHistoryVisible(false) : deleteTicketHistory}
+                disabled={deletingHistory}
+                style={({ pressed }) => [styles.activityConfirmButton, styles.activityConfirmDelete, pressed && styles.pressed, deletingHistory && styles.activityConfirmButtonDisabled]}
+              >
+                {deletingHistory
+                  ? <ActivityIndicator color="#FFFFFF" size="small" />
+                  : <Text style={styles.activityConfirmDeleteText}>{deleteHistoryError ? 'Fermer' : 'Supprimer'}</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   )
 }
 
 function ActivityTicketCard({ ticket }: { ticket: ActivityTicket }) {
-  const progress = useRef(new Animated.Value(ticket.progress)).current
+  const progressValue = Math.max(0, Math.min(100, ticket.progress))
+  const progress = useRef(new Animated.Value(progressValue)).current
+  const calledPulse = useRef(new Animated.Value(0)).current
   useEffect(() => {
-    Animated.timing(progress, { toValue: ticket.progress, duration: 650, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start()
-  }, [progress, ticket.progress])
+    Animated.timing(progress, { toValue: progressValue, duration: 650, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start()
+  }, [progress, progressValue])
   const progressWidth = progress.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] })
   const called = ticket.status === 'CALLED'
   const closed = !ticket.active
+  const ticketLabel = `TICKET #${String(ticket.number).padStart(3, '0')}`
 
-  return <View style={[styles.activityTicketCard, called && styles.activityTicketCardCalled, closed && styles.activityTicketCardClosed]}>
-    <View style={styles.activityTicketHeader}>
-      <View><Text style={styles.activityCardEyebrow}>{ticket.agencyName}</Text><Text style={styles.activityTicketNumber}>TICKET #{String(ticket.number).padStart(3, '0')}</Text><Text style={styles.activityTicketService}>{ticket.service}</Text></View>
-      <View style={[styles.activityStatusPill, called && styles.activityStatusPillCalled, closed && styles.activityStatusPillClosed]}><View style={[styles.activityLiveDot, called && styles.activityLiveDotCalled, closed && styles.activityLiveDotClosed]} /><Text style={styles.activityStatusText}>{ticket.statusLabel}</Text></View>
+  useEffect(() => {
+    calledPulse.setValue(0)
+    if (!called) return
+    const pulse = Animated.loop(Animated.sequence([
+      Animated.timing(calledPulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+      Animated.timing(calledPulse, { toValue: 0, duration: 900, useNativeDriver: true }),
+    ]))
+    pulse.start()
+    return () => pulse.stop()
+  }, [called, calledPulse])
+
+  if (closed) {
+    return <View style={[styles.activityTicketCard, styles.activityTicketHistoryCard]}>
+      <Text style={styles.activityTicketHistoryNumber}>{ticketLabel}</Text>
+      <View style={styles.activityTicketHistoryStatus}>
+        <Ionicons name="checkmark-circle" size={16} color="#CBD5E1" />
+        <Text style={styles.activityTicketHistoryStatusText}>{ticket.statusLabel}</Text>
+      </View>
     </View>
-    <Text style={styles.activityTicketLead}>{called ? 'C’EST VOTRE TOUR !' : closed ? ticket.statusLabel : ticket.peopleAhead <= 3 ? 'VOTRE TOUR APPROCHE' : 'SUIVI EN TEMPS RÉEL'}</Text>
-    <View style={styles.activityTicketStats}><Text style={styles.activityPeopleAhead}>{ticket.peopleAhead} <Text style={styles.activityPeopleAheadLabel}>personne{ticket.peopleAhead === 1 ? '' : 's'} avant vous</Text></Text><Text style={styles.activityProgressText}>{ticket.progress}%</Text></View>
-    <View style={styles.activityProgressTrack}><Animated.View style={[styles.activityProgressFill, { width: progressWidth }]} /></View>
-    <View style={styles.activityTicketFooter}><View><Text style={styles.activityMetaLabel}>ATTENTE ESTIMÉE</Text><Text style={styles.activityMetaValue}>{ticket.estimatedWait} min</Text></View><View style={styles.activityFooterRight}><Text style={styles.activityMetaLabel}>DERNIÈRE MISE À JOUR</Text><Text style={styles.activityMetaValue}>{new Date(ticket.lastUpdatedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text></View></View>
-    {ticket.guichet && <Text style={styles.activityGuichet}>Présentez-vous au {ticket.guichet}</Text>}
+  }
+
+  return <View style={[styles.activityTicketCard, called && styles.activityTicketCardCalled]}>
+    <LinearGradient
+      colors={called ? ['#061831', '#073B68', '#064A7C'] : ['#061A32', '#082D50', '#073A65']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={StyleSheet.absoluteFill}
+    />
+    <View pointerEvents="none" style={styles.activityTicketOrb} />
+    <View style={styles.activityTicketHeader}>
+      <View style={styles.activityTicketIdentity}>
+        <View style={styles.activityTicketAgency}><Ionicons name="location" size={12} color="#48D9FF" /><Text numberOfLines={1} style={styles.activityCardEyebrow}>{ticket.agencyName}</Text></View>
+        <Text style={styles.activityTicketNumber}>{ticketLabel}</Text>
+        <View style={styles.activityTicketServiceChip}><Ionicons name="briefcase-outline" size={13} color="#A9DFFF" /><Text numberOfLines={1} style={styles.activityTicketService}>{ticket.service}</Text></View>
+      </View>
+      <View style={[styles.activityStatusPill, called && styles.activityStatusPillCalled]}>
+        <View style={[styles.activityLiveDot, called && styles.activityLiveDotCalled]} />
+        <Text numberOfLines={2} style={styles.activityStatusText}>{ticket.statusLabel}</Text>
+      </View>
+    </View>
+    <View style={styles.activityTicketCallout}>
+      <View style={styles.activityTicketCallIcon}>
+        {called && <Animated.View style={[styles.activityTicketCallPulse, {
+          opacity: calledPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.75] }),
+          transform: [{ scale: calledPulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.25] }) }],
+        }]} />}
+        <Ionicons name={called ? 'checkmark' : 'pulse-outline'} size={25} color={called ? '#63F2B0' : '#45D9FF'} />
+      </View>
+      <View style={styles.activityTicketCallCopy}>
+        <Text numberOfLines={2} style={[styles.activityTicketLead, called && styles.activityTicketLeadCalled]}>
+          {called ? 'C’EST VOTRE TOUR !' : ticket.peopleAhead <= 3 ? 'VOTRE TOUR APPROCHE' : 'SUIVI EN TEMPS RÉEL'}
+        </Text>
+        <Text numberOfLines={1} style={styles.activityTicketCallHint}>
+          {called ? ticket.guichet ? `Présentez-vous au ${ticket.guichet}` : 'Veuillez vous présenter au guichet.' : 'Votre position se met à jour automatiquement.'}
+        </Text>
+      </View>
+    </View>
+    <View style={styles.activityTicketProgressPanel}>
+      <View style={styles.activityTicketStats}>
+        <Text numberOfLines={1} style={styles.activityPeopleAhead}>{ticket.peopleAhead} <Text style={styles.activityPeopleAheadLabel}>personne{ticket.peopleAhead === 1 ? '' : 's'} avant vous</Text></Text>
+        <Text style={styles.activityProgressText}>{progressValue}%</Text>
+      </View>
+      <View style={styles.activityProgressTrack}><Animated.View style={[styles.activityProgressFill, { width: progressWidth }]} /></View>
+    </View>
+    <View style={styles.activityTicketFooter}>
+      <View style={styles.activityTicketMetric}>
+        <View style={styles.activityMetricIcon}><Ionicons name="time-outline" size={16} color="#39D7FF" /></View>
+        <View><Text style={styles.activityMetaLabel}>ATTENTE ESTIMÉE</Text><Text style={styles.activityMetaValue}>{ticket.estimatedWait} min</Text></View>
+      </View>
+      <View style={styles.activityMetricDivider} />
+      <View style={[styles.activityTicketMetric, styles.activityTicketMetricRight]}>
+        <View style={styles.activityMetricIcon}><Ionicons name="refresh-outline" size={16} color="#39D7FF" /></View>
+        <View><Text style={styles.activityMetaLabel}>DERNIÈRE MISE À JOUR</Text><Text style={styles.activityMetaValue}>{new Date(ticket.lastUpdatedAt).toLocaleTimeString(activeLanguage === 'ar' ? 'ar-TN' : activeLanguage === 'en' ? 'en-GB' : 'fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text></View>
+      </View>
+    </View>
   </View>
 }
 
@@ -1105,7 +2659,7 @@ function ActivityAppointmentCard({ appointment, onCancel }: { appointment: Activ
   </View>
 }
 
-function TicketScreen({ agencies, serviceOpen, pushToken, initialAgency, onBack }: { agencies: Agency[]; serviceOpen: boolean; pushToken: string | null; initialAgency?: Agency | null; onBack: () => void }) {
+function TicketScreen({ agencies, serviceOpen, pushToken, initialAgency, onActivityUpdate, onBack }: { agencies: Agency[]; serviceOpen: boolean; pushToken: string | null; initialAgency?: Agency | null; onActivityUpdate: () => void; onBack: () => void }) {
   const [stage, setStage] = useState<'agency' | 'service'>(initialAgency ? 'service' : 'agency')
   const [selectedAgency, setSelectedAgency] = useState<Agency | null>(initialAgency ?? null)
   const [service, setService] = useState('')
@@ -1146,13 +2700,13 @@ function TicketScreen({ agencies, serviceOpen, pushToken, initialAgency, onBack 
     try {
       const permission = await Location.requestForegroundPermissionsAsync()
       if (permission.status !== 'granted') {
-        Alert.alert('Localisation refusée', 'Autorisez la localisation pour trouver l’agence la plus proche.')
+        showAlert('Localisation refusée', 'Autorisez la localisation pour trouver l’agence la plus proche.')
         return
       }
       const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
       setPosition({ latitude: current.coords.latitude, longitude: current.coords.longitude })
     } catch {
-      Alert.alert('Localisation indisponible', 'Vérifiez le GPS de votre téléphone puis réessayez.')
+      showAlert('Localisation indisponible', 'Vérifiez le GPS de votre téléphone puis réessayez.')
     } finally {
       setLocationLoading(false)
     }
@@ -1164,8 +2718,9 @@ function TicketScreen({ agencies, serviceOpen, pushToken, initialAgency, onBack 
     try {
       const data = await api<Ticket>('/api/ticket', { method: 'POST', body: JSON.stringify({ agencyId: selectedAgency.id, service, notificationMode: 'guest', pushToken, pushPlatform: Platform.OS }) })
       setTicket(data)
+      onActivityUpdate()
     } catch (error) {
-      Alert.alert('Ticket impossible', error instanceof Error ? error.message : 'Service indisponible.')
+      showAlert('Ticket impossible', error instanceof Error ? error.message : 'Service indisponible.')
     } finally {
       setLoading(false)
     }
@@ -1244,6 +2799,10 @@ function getDistanceKm(from: { latitude: number; longitude: number }, agency: Pi
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+function normalizeSearchText(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase()
+}
+
 function TicketHeroBanner({ serviceOpen }: { serviceOpen: boolean }) {
   return <View style={styles.ticketHero}>
     <View style={styles.ticketHeroOrb} />
@@ -1273,12 +2832,12 @@ function LegacyAppointmentScreen({ agencies, onBack }: { agencies: Agency[]; onB
 
   async function chooseAgency(value: Agency) {
     setAgency(value); setCharge(null); setSlots([]); setTime(''); setLoading(true)
-    try { setCharges((await api<Charge[]>(`/api/charges?agencyId=${value.id}`)).filter(item => item.isActive !== false)) } catch { setCharges([]); Alert.alert('Erreur', 'Impossible de charger les chargés.') } finally { setLoading(false) }
+    try { setCharges((await api<Charge[]>(`/api/charges?agencyId=${value.id}`)).filter(item => item.isActive !== false)) } catch (error) { setCharges([]); showAlert('Erreur', error instanceof Error ? error.message : 'Impossible de charger les chargés.') } finally { setLoading(false) }
   }
 
   async function chooseCharge(value: Charge) {
     setCharge(value); setTime(''); setLoading(true)
-    try { const data = await api<{ slots: Slot[] }>(`/api/charges/${value.id}/availability?date=${date}`); setSlots(data.slots || []) } catch { setSlots([]); Alert.alert('Calendrier indisponible', 'Réessayez dans quelques instants.') } finally { setLoading(false) }
+    try { const data = await api<{ slots: Slot[] }>(`/api/charges/${value.id}/availability?date=${date}`); setSlots(data.slots || []) } catch (error) { setSlots([]); showAlert('Calendrier indisponible', error instanceof Error ? error.message : 'Réessayez dans quelques instants.') } finally { setLoading(false) }
   }
 
   async function reloadSlots(nextDate: string) {
@@ -1286,7 +2845,7 @@ function LegacyAppointmentScreen({ agencies, onBack }: { agencies: Agency[]; onB
     setDate(safeDate); setTime('')
     if (!charge) return
     setLoading(true)
-    try { const data = await api<{ slots: Slot[] }>(`/api/charges/${charge.id}/availability?date=${safeDate}`); setSlots(data.slots || []) } catch { setSlots([]) } finally { setLoading(false) }
+    try { const data = await api<{ slots: Slot[] }>(`/api/charges/${charge.id}/availability?date=${safeDate}`); setSlots(data.slots || []) } catch (error) { setSlots([]); showAlert('Calendrier indisponible', error instanceof Error ? error.message : 'Réessayez dans quelques instants.') } finally { setLoading(false) }
   }
 
   async function submit() {
@@ -1295,7 +2854,7 @@ function LegacyAppointmentScreen({ agencies, onBack }: { agencies: Agency[]; onB
     try {
       const data = await api<{ appointment: Appointment }>('/api/appointments', { method: 'POST', body: JSON.stringify({ chargeId: charge.id, date, time, customerName: name, customerPhone: phone, customerEmail: email, subject }) })
       setResult(data.appointment)
-    } catch (error) { Alert.alert('Réservation impossible', error instanceof Error ? error.message : 'Créneau indisponible.') } finally { setLoading(false) }
+    } catch (error) { showAlert('Réservation impossible', error instanceof Error ? error.message : 'Créneau indisponible.') } finally { setLoading(false) }
   }
 
   if (result) return <ScreenLayout title="Rendez-vous confirmé" onBack={onBack}><View style={styles.confirmCard}><Text style={styles.confirmIcon}>✓</Text><Text style={styles.cardEyebrow}>CODE RENDEZ-VOUS</Text><Text style={styles.reference}>{result.reference}</Text><Text style={styles.confirmText}>{dateLabel(result.date)} à {result.time}</Text><Text style={styles.confirmText}>{result.customerName}</Text><Text style={styles.ticketHint}>Conservez ce code pour consulter ou annuler votre rendez-vous.</Text><PrimaryButton label="Nouveau rendez-vous" onPress={() => setResult(null)} /></View></ScreenLayout>
@@ -1303,7 +2862,7 @@ function LegacyAppointmentScreen({ agencies, onBack }: { agencies: Agency[]; onB
   return <ScreenLayout title="Prendre rendez-vous" onBack={onBack}>
     <SectionTitle eyebrow="1 · AGENCE" title="Choisissez une agence" />
     {agencies.map(item => <Pressable key={item.id} onPress={() => chooseAgency(item)} style={[styles.selectRow, agency?.id === item.id && styles.selectedRow]}><View style={styles.agencyCode}><Text style={styles.agencyCodeText}>{item.code}</Text></View><View style={styles.agencyCopy}><Text style={styles.agencyName}>{item.name}</Text><Text style={styles.agencyMeta}>{item.city}</Text></View><Text style={styles.radio}>{agency?.id === item.id ? '●' : '○'}</Text></Pressable>)}
-    {agency && <><SectionTitle eyebrow="2 · CONSEILLER" title="Choisissez un chargé" />{loading && !charges.length ? <ActivityIndicator color="#0065a1" /> : charges.map(item => <Pressable key={item.id} onPress={() => chooseCharge(item)} style={[styles.selectRow, charge?.id === item.id && styles.selectedRow]}><View style={styles.agencyCode}><Text style={styles.agencyCodeText}>{item.code}</Text></View><View style={styles.agencyCopy}><Text style={styles.agencyName}>{item.name}</Text><Text style={styles.agencyMeta}>{item.agencyName}</Text></View><Text style={styles.radio}>{charge?.id === item.id ? '●' : '○'}</Text></Pressable>)}</>}
+    {agency && <><SectionTitle eyebrow="2 · CONSEILLER" title="Choisissez un chargé" />{loading && !charges.length ? <ActivityIndicator color="#0065a1" /> : charges.map(item => <Pressable key={item.id} onPress={() => chooseCharge(item)} style={[styles.selectRow, charge?.id === item.id && styles.selectedRow]}><View style={styles.agencyCode}><Text style={styles.agencyCodeText}>{getChargeInitials(item.name)}</Text></View><View style={styles.agencyCopy}><Text style={styles.agencyName}>{item.name}</Text><Text style={styles.agencyMeta}>{item.agencyName}</Text></View><Text style={styles.radio}>{charge?.id === item.id ? '●' : '○'}</Text></Pressable>)}</>}
     {charge && <><SectionTitle eyebrow="3 · CRÉNEAU" title="Choisissez la date et l'heure" /><View style={styles.dateRow}><Pressable onPress={() => reloadSlots(addDays(date, -1))} style={styles.dateButton}><Text style={styles.dateButtonText}>‹</Text></Pressable><View style={styles.dateCenter}><Text style={styles.dateText}>{dateLabel(date)}</Text><Text style={styles.dateCode}>{date}</Text></View><Pressable onPress={() => reloadSlots(addDays(date, 1))} style={styles.dateButton}><Text style={styles.dateButtonText}>›</Text></Pressable></View><View style={styles.slotGrid}>{slots.filter(slot => slot.available).map(slot => <Pressable key={slot.time} onPress={() => setTime(slot.time)} style={[styles.slot, time === slot.time && styles.selectedSlot]}><Text style={[styles.slotText, time === slot.time && styles.selectedSlotText]}>{slot.time}</Text></Pressable>)}</View>{time && <><Field label="Nom complet" value={name} onChangeText={setName} placeholder="Votre nom" /><Field label="Téléphone" value={phone} onChangeText={setPhone} placeholder="Votre numéro" keyboardType="phone-pad" /><Field label="Email (optionnel)" value={email} onChangeText={setEmail} placeholder="vous@email.com" keyboardType="email-address" /><Field label="Sujet (optionnel)" value={subject} onChangeText={setSubject} placeholder="Motif du rendez-vous" /><PrimaryButton label={loading ? 'Réservation...' : 'Confirmer le rendez-vous'} onPress={submit} disabled={!name.trim() || !phone.trim() || loading} /></>}</>}
   </ScreenLayout>
 }
@@ -1340,11 +2899,12 @@ function AppointmentResultCard({ result, onReset }: { result: Appointment; onRes
   )
 }
 
-function AppointmentScreen({ agencies, pushToken, initialAgency, onBack }: { agencies: Agency[]; pushToken: string | null; initialAgency?: Agency | null; onBack: () => void }) {
+function AppointmentScreen({ agencies, pushToken, initialAgency, onActivityUpdate, onBack }: { agencies: Agency[]; pushToken: string | null; initialAgency?: Agency | null; onActivityUpdate: () => void; onBack: () => void }) {
   const [stage, setStage] = useState<string>(initialAgency ? 'charge' : 'agency')
   const [agency, setAgency] = useState<Agency | null>(initialAgency ?? null)
   const [charges, setCharges] = useState<Charge[]>([])
   const [charge, setCharge] = useState<Charge | null>(null)
+  const [chargeSearch, setChargeSearch] = useState('')
   const [date, setDate] = useState(todayInputDate())
   const [slots, setSlots] = useState<Slot[]>([])
   const [time, setTime] = useState('')
@@ -1358,6 +2918,11 @@ function AppointmentScreen({ agencies, pushToken, initialAgency, onBack }: { age
 
   const agencyPageCount = Math.max(1, Math.ceil(agencies.length / MOBILE_AGENCIES_PER_PAGE))
   const paginatedAgencies = useMemo(() => agencies.slice((agencyPage - 1) * MOBILE_AGENCIES_PER_PAGE, agencyPage * MOBILE_AGENCIES_PER_PAGE), [agencies, agencyPage])
+  const filteredCharges = useMemo(() => {
+    const query = chargeSearch.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase()
+    if (!query) return charges
+    return charges.filter(item => `${item.name} ${item.agencyName || ''}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().includes(query))
+  }, [charges, chargeSearch])
 
   useEffect(() => {
     setAgencyPage(page => Math.min(page, agencyPageCount))
@@ -1370,21 +2935,21 @@ function AppointmentScreen({ agencies, pushToken, initialAgency, onBack }: { age
     setLoading(true)
     api<Charge[]>(`/api/charges?agencyId=${initialAgency.id}`)
       .then(data => setCharges(data.filter(item => item.isActive !== false)))
-      .catch(() => {
+      .catch(error => {
         setCharges([])
-        Alert.alert('Erreur', 'Impossible de charger les chargés.')
+        showAlert('Erreur', error instanceof Error ? error.message : 'Impossible de charger les chargés.')
       })
       .finally(() => setLoading(false))
   }, [initialAgency])
 
   async function chooseAgency(value: Agency) {
     setAgency(value); setCharge(null); setSlots([]); setTime(''); setStage('charge'); setLoading(true)
-    try { setCharges((await api<Charge[]>(`/api/charges?agencyId=${value.id}`)).filter(item => item.isActive !== false)) } catch { setCharges([]); Alert.alert('Erreur', 'Impossible de charger les chargés.') } finally { setLoading(false) }
+    try { setCharges((await api<Charge[]>(`/api/charges?agencyId=${value.id}`)).filter(item => item.isActive !== false)) } catch (error) { setCharges([]); showAlert('Erreur', error instanceof Error ? error.message : 'Impossible de charger les chargés.') } finally { setLoading(false) }
   }
 
   async function chooseCharge(value: Charge) {
     setCharge(value); setTime(''); setStage('calendar'); setLoading(true)
-    try { const data = await api<{ slots: Slot[] }>(`/api/charges/${value.id}/availability?date=${date}`); setSlots(data.slots || []) } catch { setSlots([]); Alert.alert('Calendrier indisponible', 'Réessayez dans quelques instants.') } finally { setLoading(false) }
+    try { const data = await api<{ slots: Slot[] }>(`/api/charges/${value.id}/availability?date=${date}`); setSlots(data.slots || []) } catch (error) { setSlots([]); showAlert('Calendrier indisponible', error instanceof Error ? error.message : 'Réessayez dans quelques instants.') } finally { setLoading(false) }
   }
 
   async function reloadSlots(nextDate: string) {
@@ -1392,13 +2957,13 @@ function AppointmentScreen({ agencies, pushToken, initialAgency, onBack }: { age
     setDate(safeDate); setTime('')
     if (!charge) return
     setLoading(true)
-    try { const data = await api<{ slots: Slot[] }>(`/api/charges/${charge.id}/availability?date=${safeDate}`); setSlots(data.slots || []) } catch { setSlots([]) } finally { setLoading(false) }
+    try { const data = await api<{ slots: Slot[] }>(`/api/charges/${charge.id}/availability?date=${safeDate}`); setSlots(data.slots || []) } catch (error) { setSlots([]); showAlert('Calendrier indisponible', error instanceof Error ? error.message : 'Réessayez dans quelques instants.') } finally { setLoading(false) }
   }
 
   async function submit() {
     if (!charge || !time || !name.trim() || !phone.trim()) return
     setLoading(true)
-    try { const data = await api<{ appointment: Appointment }>('/api/appointments', { method: 'POST', body: JSON.stringify({ chargeId: charge.id, date, time, customerName: name, customerPhone: phone, customerEmail: email, subject, pushToken, pushPlatform: Platform.OS }) }); await scheduleAppointmentReminders(data.appointment); setResult(data.appointment) } catch (error) { Alert.alert('Réservation impossible', error instanceof Error ? error.message : 'Créneau indisponible.') } finally { setLoading(false) }
+    try { const data = await api<{ appointment: Appointment }>('/api/appointments', { method: 'POST', body: JSON.stringify({ chargeId: charge.id, date, time, customerName: name, customerPhone: phone, customerEmail: email, subject, pushToken, pushPlatform: Platform.OS }) }); await scheduleAppointmentReminders(data.appointment); setResult(data.appointment); onActivityUpdate() } catch (error) { showAlert('Réservation impossible', error instanceof Error ? error.message : 'Créneau indisponible.') } finally { setLoading(false) }
   }
 
   if (result) return <ScreenLayout title="Rendez-vous confirmé" onBack={onBack}><AppointmentResultCard result={result} onReset={() => { setResult(null); setStage('agency'); setAgency(null); setCharge(null) }} /></ScreenLayout>
@@ -1423,8 +2988,29 @@ function AppointmentScreen({ agencies, pushToken, initialAgency, onBack }: { age
   return <ScreenLayout title="Prendre rendez-vous" onBack={goBack}>
     <StepProgress current={stage === 'agency' ? 1 : stage === 'charge' ? 2 : 3} total={3} label={stage === 'agency' ? 'Choisir une agence' : stage === 'charge' ? 'Choisir un chargé' : 'Choisir un créneau'} />
     {stage === 'agency' && <><SectionTitle eyebrow="1 · AGENCE" title="Choisissez une agence" />{agencies.map(item => <Pressable key={item.id} onPress={() => chooseAgency(item)} style={styles.selectRow}><View style={styles.agencyCode}><Text style={styles.agencyCodeText}>{item.code}</Text></View><View style={styles.agencyCopy}><Text style={styles.agencyName}>{item.name}</Text><Text style={styles.agencyMeta}>{item.city}</Text></View><Text style={styles.rowChevron}>›</Text></Pressable>)}</>}
-    {stage === 'charge' && <><View style={styles.selectedAgencyBanner}><View style={styles.agencyCode}><Text style={styles.agencyCodeText}>{agency?.code}</Text></View><View style={styles.agencyCopy}><Text style={styles.agencyName}>{agency?.name}</Text><Text style={styles.agencyMeta}>Agence sélectionnée</Text></View></View><SectionTitle eyebrow="2 · CONSEILLER" title="Choisissez un chargé" />{loading && !charges.length ? <ActivityIndicator color="#0065a1" /> : charges.map(item => <Pressable key={item.id} onPress={() => chooseCharge(item)} style={styles.selectRow}><View style={styles.agencyCode}><Text style={styles.agencyCodeText}>{item.code}</Text></View><View style={styles.agencyCopy}><Text style={styles.agencyName}>{item.name}</Text><Text style={styles.agencyMeta}>{item.agencyName || agency?.name}</Text></View><Text style={styles.rowChevron}>›</Text></Pressable>)}</>}
-    {stage === 'calendar' && charge && <><View style={styles.selectedAgencyBanner}><View style={styles.agencyCode}><Text style={styles.agencyCodeText}>{charge.code}</Text></View><View style={styles.agencyCopy}><Text style={styles.agencyName}>{charge.name}</Text><Text style={styles.agencyMeta}>{agency?.name}</Text></View></View><SectionTitle eyebrow="3 · CRÉNEAU" title="Choisissez la date et l'heure" /><View style={styles.dateRow}><Pressable onPress={() => reloadSlots(addDays(date, -1))} style={styles.dateButton}><Text style={styles.dateButtonText}>‹</Text></Pressable><View style={styles.dateCenter}><Text style={styles.dateText}>{dateLabel(date)}</Text><Text style={styles.dateCode}>{date}</Text></View><Pressable onPress={() => reloadSlots(addDays(date, 1))} style={styles.dateButton}><Text style={styles.dateButtonText}>›</Text></Pressable></View><View style={styles.slotGrid}>{slots.filter(slot => slot.available).map(slot => <Pressable key={slot.time} onPress={() => setTime(slot.time)} style={[styles.slot, time === slot.time && styles.selectedSlot]}><Text style={[styles.slotText, time === slot.time && styles.selectedSlotText]}>{slot.time}</Text></Pressable>)}</View>{!slots.some(slot => slot.available) && !loading && <Text style={styles.emptyText}>Aucun créneau disponible pour cette date.</Text>}{time && <><Field label="Nom complet" value={name} onChangeText={setName} placeholder="Votre nom" /><Field label="Téléphone" value={phone} onChangeText={setPhone} placeholder="Votre numéro" keyboardType="phone-pad" /><Field label="Email (optionnel)" value={email} onChangeText={setEmail} placeholder="vous@email.com" keyboardType="email-address" /><Field label="Sujet (optionnel)" value={subject} onChangeText={setSubject} placeholder="Motif du rendez-vous" /><PrimaryButton label={loading ? 'Réservation...' : 'Confirmer le rendez-vous'} onPress={submit} disabled={!name.trim() || !phone.trim() || loading} /></>}</>}
+    {stage === 'charge' && <>
+      <View style={styles.selectedAgencyBanner}><View style={styles.agencyCode}><Text style={styles.agencyCodeText}>{agency?.code}</Text></View><View style={styles.agencyCopy}><Text style={styles.agencyName}>{agency?.name}</Text><Text style={styles.agencyMeta}>Agence sélectionnée</Text></View></View>
+      <SectionTitle eyebrow="2 · CONSEILLER" title="Choisissez un chargé" />
+      <View style={styles.advisorSearchBox}>
+        <Ionicons name="search-outline" size={19} color={COLORS.primary} />
+        <TextInput accessibilityLabel="Rechercher un chargé" value={chargeSearch} onChangeText={setChargeSearch} placeholder="Rechercher un chargé..." placeholderTextColor={COLORS.muted} style={styles.advisorSearchInput} />
+        {chargeSearch.length > 0 && <Pressable onPress={() => setChargeSearch('')} accessibilityRole="button" accessibilityLabel="Effacer la recherche"><Ionicons name="close-circle" size={19} color={COLORS.muted} /></Pressable>}
+      </View>
+      {loading && !charges.length
+        ? <ActivityIndicator color={COLORS.primary} />
+        : <View style={styles.advisorGrid}>
+          {filteredCharges.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Choisir ${item.name}`} onPress={() => chooseCharge(item)} style={({ pressed }) => [styles.advisorCard, pressed && styles.pressed]}>
+            <View style={styles.advisorCardTop}>
+              <View style={styles.advisorInitials}><Text style={styles.advisorInitialsText}>{getChargeInitials(item.name)}</Text></View>
+              <Ionicons name="chevron-forward" size={17} color={COLORS.primary} />
+            </View>
+            <Text numberOfLines={2} style={styles.advisorName}>{item.name}</Text>
+            <Text numberOfLines={1} style={styles.advisorAgency}>{item.agencyName || agency?.name}</Text>
+          </Pressable>)}
+          {filteredCharges.length === 0 && <Text style={styles.advisorEmpty}>{charges.length ? 'Aucun chargé ne correspond à votre recherche.' : 'Aucun chargé disponible.'}</Text>}
+        </View>}
+    </>}
+    {stage === 'calendar' && charge && <><View style={styles.selectedAgencyBanner}><View style={styles.agencyCode}><Text style={styles.agencyCodeText}>{getChargeInitials(charge.name)}</Text></View><View style={styles.agencyCopy}><Text style={styles.agencyName}>{charge.name}</Text><Text style={styles.agencyMeta}>{agency?.name}</Text></View></View><SectionTitle eyebrow="3 · CRÉNEAU" title="Choisissez la date et l'heure" /><View style={styles.dateRow}><Pressable onPress={() => reloadSlots(addDays(date, -1))} style={styles.dateButton}><Text style={styles.dateButtonText}>‹</Text></Pressable><View style={styles.dateCenter}><Text style={styles.dateText}>{dateLabel(date)}</Text><Text style={styles.dateCode}>{date}</Text></View><Pressable onPress={() => reloadSlots(addDays(date, 1))} style={styles.dateButton}><Text style={styles.dateButtonText}>›</Text></Pressable></View><View style={styles.slotGrid}>{slots.filter(slot => slot.available).map(slot => <Pressable key={slot.time} onPress={() => setTime(slot.time)} style={[styles.slot, time === slot.time && styles.selectedSlot]}><Text style={[styles.slotText, time === slot.time && styles.selectedSlotText]}>{slot.time}</Text></Pressable>)}</View>{!slots.some(slot => slot.available) && !loading && <Text style={styles.emptyText}>Aucun créneau disponible pour cette date.</Text>}{time && <><Field label="Nom complet" value={name} onChangeText={setName} placeholder="Votre nom" /><Field label="Téléphone" value={phone} onChangeText={setPhone} placeholder="Votre numéro" keyboardType="phone-pad" /><Field label="Email (optionnel)" value={email} onChangeText={setEmail} placeholder="vous@email.com" keyboardType="email-address" /><Field label="Sujet (optionnel)" value={subject} onChangeText={setSubject} placeholder="Motif du rendez-vous" /><PrimaryButton label={loading ? 'Réservation...' : 'Confirmer le rendez-vous'} onPress={submit} disabled={!name.trim() || !phone.trim() || loading} /></>}</>}
   </ScreenLayout>
 }
 
@@ -1455,11 +3041,15 @@ function ScreenScreen({ agencies, serviceOpen, onBack }: { agencies: Agency[]; s
   const [data, setData] = useState<ScreenData | null>(null)
   const [agencySearch, setAgencySearch] = useState('')
   const [agencyPage, setAgencyPage] = useState(1)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
+  const [now, setNow] = useState(Date.now())
+  const [refreshFailed, setRefreshFailed] = useState(false)
+  const livePulse = useRef(new Animated.Value(0)).current
 
   const visibleAgencies = useMemo(() => {
-    const query = agencySearch.trim().toLowerCase()
+    const query = normalizeSearchText(agencySearch)
     if (!query) return agencies
-    return agencies.filter(item => `${item.name} ${item.city} ${item.code}`.toLowerCase().includes(query))
+    return agencies.filter(item => normalizeSearchText(`${item.name} ${item.city} ${item.code}`).includes(query))
   }, [agencies, agencySearch])
 
   const agencyPageCount = Math.max(1, Math.ceil(visibleAgencies.length / MOBILE_AGENCIES_PER_PAGE))
@@ -1474,22 +3064,68 @@ function ScreenScreen({ agencies, serviceOpen, onBack }: { agencies: Agency[]; s
   }, [agencyPageCount])
 
   const load = useCallback(async (id: number) => {
-    try { setData(await api<ScreenData>(`/api/agency/${id}`)) } catch { setData(null) }
+    try {
+      setData(await api<ScreenData>(`/api/agency/${id}`))
+      const updatedAt = Date.now()
+      setLastUpdatedAt(updatedAt)
+      setNow(updatedAt)
+      setRefreshFailed(false)
+    } catch {
+      setRefreshFailed(true)
+    }
   }, [])
 
   useEffect(() => {
     if (!agency) return
-    load(agency.id)
+    setData(null)
+    setLastUpdatedAt(null)
+    setRefreshFailed(false)
+    void load(agency.id)
     const timer = setInterval(() => load(agency.id), 10000)
     return () => clearInterval(timer)
   }, [agency, load])
 
-  if (!agency) return <ScreenLayout title="Écrans en direct" onBack={onBack}>
+  useEffect(() => {
+    if (!agency) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [agency])
+
+  useEffect(() => {
+    if (!agency) return
+    const pulse = Animated.loop(Animated.sequence([
+      Animated.timing(livePulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+      Animated.timing(livePulse, { toValue: 0, duration: 700, useNativeDriver: true }),
+    ]))
+    pulse.start()
+    return () => pulse.stop()
+  }, [agency, livePulse])
+
+  if (!agency) return <ScreenLayout title="Écrans en direct" onBack={onBack} stickyHeaderIndices={[2]}>
     <ScreenHeroBanner />
     <SectionTitle eyebrow="EN DIRECT" title="Choisissez une agence" />
-    <View style={styles.screenSearchBox}>
-      <Text style={styles.screenSearchIcon}>⌕</Text>
-      <TextInput accessibilityLabel="Rechercher une agence" value={agencySearch} onChangeText={setAgencySearch} placeholder="Rechercher une agence..." placeholderTextColor={COLORS.muted} style={styles.screenSearchInput} />
+    <View style={[styles.screenSearchBox, styles.screenSearchSticky]}>
+      <Ionicons name="search-outline" size={20} color={COLORS.primary} />
+      <TextInput
+        accessibilityLabel="Rechercher une agence"
+        value={agencySearch}
+        onChangeText={value => {
+          setAgencySearch(value)
+          setAgencyPage(1)
+        }}
+        placeholder="Rechercher une agence..."
+        placeholderTextColor={COLORS.muted}
+        autoCorrect={false}
+        autoCapitalize="none"
+        returnKeyType="search"
+        multiline={false}
+        numberOfLines={1}
+        underlineColorAndroid="transparent"
+        style={styles.screenSearchInput}
+      />
+      {agencySearch.length > 0 && <Pressable onPress={() => setAgencySearch('')} accessibilityRole="button" accessibilityLabel="Effacer la recherche">
+        <Ionicons name="close-circle" size={19} color={COLORS.muted} />
+      </Pressable>}
     </View>
     <View style={styles.screenResultsHeader}>
       <Text style={styles.screenResultsCount}>{visibleAgencies.length} agences</Text>
@@ -1510,6 +3146,7 @@ function ScreenScreen({ agencies, serviceOpen, onBack }: { agencies: Agency[]; s
   const queue = data?.queue || []
   const waitingCount = data?.queue?.length ?? agency.waitingCount
   const hasCalledTicket = Boolean(data?.called?.number)
+  const secondsSinceUpdate = lastUpdatedAt === null ? null : Math.floor((now - lastUpdatedAt) / 1000)
 
   return <ScreenLayout title={agency.name} onBack={() => { setAgency(null); setData(null) }}>
     <ScreenDisplayWelcome agency={agency} serviceOpen={serviceOpen} />
@@ -1519,7 +3156,7 @@ function ScreenScreen({ agencies, serviceOpen, onBack }: { agencies: Agency[]; s
         <View><Text style={styles.liveCardEyebrow}>TICKET APPELÉ</Text><Text style={styles.liveCardSubtitle}>Dernier passage appelé</Text></View>
         <View style={styles.liveStatusBadge}><View style={[styles.liveStatusDot, { backgroundColor: hasCalledTicket ? COLORS.success : COLORS.alert }]} /><Text style={styles.liveStatusText}>{hasCalledTicket ? 'EN COURS' : 'EN ATTENTE'}</Text></View>
       </View>
-      <View style={styles.liveNumberPanel}><Text style={styles.liveNumber}>{data?.called?.number ?? '—'}</Text></View>
+      <View style={[styles.liveNumberPanel, !hasCalledTicket && styles.liveNumberPanelEmpty]}><Text style={[styles.liveNumber, !hasCalledTicket && styles.liveNumberEmptyText]}>{hasCalledTicket ? data?.called?.number : lastUpdatedAt !== null ? 'Aucun numéro appelé pour le moment' : refreshFailed ? 'Mise à jour impossible' : 'Actualisation...'}</Text></View>
       <Text style={styles.liveGuichet}>{data?.called?.guichet?.label || 'En attente d’un appel'}</Text>
     </View>
 
@@ -1533,7 +3170,13 @@ function ScreenScreen({ agencies, serviceOpen, onBack }: { agencies: Agency[]; s
       </View>)}
       {queue.length === 0 && <View style={styles.queueEmpty}><Ionicons name="checkmark-circle-outline" size={28} color={COLORS.success} /><Text style={styles.queueEmptyTitle}>Aucun ticket en attente</Text><Text style={styles.queueEmptyText}>La file est actuellement vide.</Text></View>}
     </View>
-    <View style={styles.liveHintRow}><Ionicons name="time-outline" size={15} color={COLORS.muted} /><Text style={styles.liveHint}>Mise à jour automatique toutes les 10 secondes.</Text></View>
+    <View style={styles.liveHintRow}>
+      <Animated.View style={[styles.liveUpdateDot, refreshFailed && styles.liveUpdateDotError, {
+        opacity: livePulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }),
+        transform: [{ scale: livePulse.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.15] }) }],
+      }]} />
+      <Text style={styles.liveHint}>{refreshFailed ? 'Mise à jour impossible' : secondsSinceUpdate === null ? 'Actualisation...' : `Mis à jour il y a ${secondsSinceUpdate} s`}</Text>
+    </View>
     </> : <View style={styles.screenClosedCard}>
       <Text style={styles.screenClosedEyebrow}>HORS HORAIRES DE TRAVAIL</Text>
       <View style={styles.screenClosedLabel}><Ionicons name="lock-closed-outline" size={22} color="#FFFFFF" /><Text style={styles.screenClosedLabelText}>GUICHET FERMÉ</Text></View>
@@ -1543,44 +3186,131 @@ function ScreenScreen({ agencies, serviceOpen, onBack }: { agencies: Agency[]; s
   </ScreenLayout>
 }
 
-function ScreenLayout({ title, onBack, children }: { title: string; onBack: () => void; children: React.ReactNode }) {
-  return <><AppHeader title={title} onBack={onBack} /><ScrollView contentContainerStyle={styles.scrollContent}>{children}</ScrollView></>
+function ScreenLayout({ title, onBack, children, stickyHeaderIndices }: { title: string; onBack: () => void; children: React.ReactNode; stickyHeaderIndices?: number[] }) {
+  return <><AppHeader title={title} onBack={onBack} /><ScrollView stickyHeaderIndices={stickyHeaderIndices} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.scrollContent}>{children}</ScrollView></>
 }
 
 function Notice({ text }: { text: string }) { return <View style={styles.notice}><Text style={styles.noticeText}>{text}</Text></View> }
+
+function ServiceHoursModal({ visible, hours, onClose }: {
+  visible: boolean
+  hours: { label: string; startTime: string; endTime: string }
+  onClose: () => void
+}) {
+  const { darkMode } = useContext(SettingsContext)
+  const weekdays = [
+    ['Lundi', true], ['Mardi', true], ['Mercredi', true], ['Jeudi', true],
+    ['Vendredi', true], ['Samedi', false], ['Dimanche', false],
+  ] as const
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.hoursModalRoot}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Fermer les horaires" />
+        <View style={styles.hoursModalPanel}>
+          <View style={styles.hoursModalHeader}>
+            <View style={styles.hoursModalTitleGroup}>
+              <Text style={styles.hoursModalTitle}>Horaires de travail</Text>
+              <Text style={styles.hoursModalSubtitle}>{hours.label}</Text>
+            </View>
+            <Pressable onPress={onClose} style={styles.hoursModalClose} accessibilityRole="button" accessibilityLabel="Fermer">
+              <MaterialCommunityIcons name="close" size={21} color={darkMode ? '#A5B5C5' : COLORS.muted} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.hoursModalList}>
+            {weekdays.map(([day, workingDay]) => {
+              const isOpen = workingDay
+              const schedule = workingDay
+                ? `${hours.startTime} – ${hours.endTime}`
+                : 'Fermé'
+              const rowTheme = darkMode
+                ? isOpen
+                  ? { backgroundColor: '#18382D', borderColor: '#2C6A4D', textColor: '#7DE0A8', badgeBackground: '#234A39' }
+                  : { backgroundColor: '#3B252A', borderColor: '#70414A', textColor: '#F2A0A0', badgeBackground: '#512F37' }
+                : isOpen
+                  ? { backgroundColor: '#F0FBF4', borderColor: '#BBE7CB', textColor: '#15803D', badgeBackground: '#FFFFFF' }
+                  : { backgroundColor: '#FFF5F5', borderColor: '#F2C8C8', textColor: '#B91C1C', badgeBackground: '#FFFFFF' }
+              return (
+                <View key={day} style={[styles.hoursModalRow, { backgroundColor: rowTheme.backgroundColor, borderColor: rowTheme.borderColor }]}>
+                  <View>
+                    <Text style={styles.hoursModalDay}>{day}</Text>
+                    <Text style={[styles.hoursModalTime, { color: rowTheme.textColor }]}>{schedule}</Text>
+                  </View>
+                  <Text style={[styles.hoursModalBadge, { color: rowTheme.textColor, backgroundColor: rowTheme.badgeBackground }]}>
+                    {isOpen ? 'Ouvert' : 'Fermé'}
+                  </Text>
+                </View>
+              )
+            })}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  )
+}
 
 function BottomNavigation({ tab, onChange }: { tab: Tab; onChange: (tab: Tab) => void }) {
   const items: Array<{ key: Tab; label: string; icon: string }> = [{ key: 'home', label: 'Accueil', icon: '⌂' }, { key: 'ticket', label: 'Ticket', icon: '▣' }, { key: 'appointment', label: 'Rendez-vous', icon: '□' }, { key: 'screen', label: 'Écran', icon: '▤' }]
   return <View style={styles.bottomNav}>{items.map(item => <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={item.label} accessibilityState={{ selected: tab === item.key }} onPress={() => onChange(item.key)} style={({ pressed }) => [styles.navItem, pressed && styles.navPressed]}><View style={[styles.navIconWrap, tab === item.key && styles.navIconWrapActive]}><Text style={[styles.navIcon, tab === item.key && styles.navActive]}>{item.icon}</Text></View><Text style={[styles.navLabel, tab === item.key && styles.navActive]}>{item.label}</Text></Pressable>)}</View>
 }
 
-function BottomNavigationPro({ tab, onChange }: { tab: Tab; onChange: (tab: Tab) => void }) {
-  const items: Array<{ key: Tab; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }> = [
-    { key: 'home', label: 'Accueil', icon: 'home-outline' },
-    { key: 'activity', label: 'Activité', icon: 'pulse-outline' },
-    { key: 'ticket', label: 'Ticket', icon: 'ticket-outline' },
-    { key: 'appointment', label: 'Rendez-vous', icon: 'calendar-outline' },
-    { key: 'screen', label: 'Écran', icon: 'desktop-outline' },
+function BottomNavigationPro({ tab, onChange, activityCount }: { tab: Tab; onChange: (tab: Tab) => void; activityCount: number }) {
+  const { darkMode } = useContext(SettingsContext)
+  const items: Array<{
+    key: Tab
+    label: string
+    icon: React.ComponentProps<typeof Ionicons>['name']
+    activeIcon: React.ComponentProps<typeof Ionicons>['name']
+  }> = [
+    { key: 'home', label: 'Accueil', icon: 'home-outline', activeIcon: 'home' },
+    { key: 'activity', label: 'Activité', icon: 'pulse-outline', activeIcon: 'pulse' },
+    { key: 'ticket', label: 'Ticket', icon: 'ticket-outline', activeIcon: 'ticket' },
+    { key: 'appointment', label: 'Rendez-vous', icon: 'calendar-outline', activeIcon: 'calendar' },
+    { key: 'screen', label: 'Écran', icon: 'desktop-outline', activeIcon: 'desktop' },
   ]
 
   return (
-    <View style={styles.bottomNavPro}>
+    <View style={[styles.bottomNavPro, darkMode && styles.bottomNavProDark]}>
+      <LinearGradient
+        colors={darkMode ? ['#07152E', '#0B2C62', '#07152E'] : ['#0A1B3B', '#0B3474', '#0A1B3B']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       {items.map(item => {
         const active = tab === item.key
         return (
           <Pressable
             key={item.key}
             accessibilityRole="button"
-            accessibilityLabel={item.label}
+            accessibilityLabel={item.key === 'activity' && activityCount > 0 ? `Activité, ${activityCount} élément(s) actif(s)` : item.label}
             accessibilityState={{ selected: active }}
             onPress={() => onChange(item.key)}
             style={({ pressed }) => [styles.navItemPro, pressed && styles.navPressedPro]}
           >
-            <View style={[styles.navIconWrapPro, active && styles.navIconWrapActivePro]}>
-              <Ionicons name={item.icon} size={active ? 23 : 22} color={active ? '#FFFFFF' : '#5E7491'} />
-            </View>
-            <Text style={[styles.navLabelPro, active && styles.navLabelActivePro]}>{item.label}</Text>
-            <View style={[styles.navIndicatorPro, !active && styles.navIndicatorHiddenPro]} />
+            {active ? (
+              <LinearGradient
+                colors={['#0878FF', '#0754D8', '#063FB5']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.navActiveCapsulePro}
+              >
+                <View style={styles.navIconContainer}>
+                  <Ionicons name={item.activeIcon} size={22} color="#FFFFFF" />
+                  {item.key === 'activity' && activityCount > 0 && <View style={styles.activityNavBadge}><Text style={styles.activityNavBadgeText}>{activityCount > 9 ? '9+' : activityCount}</Text></View>}
+                </View>
+                <Text numberOfLines={1} style={styles.navLabelActivePro}>{item.label}</Text>
+                <View style={styles.navActiveGlowPro} />
+              </LinearGradient>
+            ) : (
+              <View style={styles.navInactiveContentPro}>
+                <View style={styles.navIconContainer}>
+                  <Ionicons name={item.icon} size={22} color="#C4D5F2" />
+                  {item.key === 'activity' && activityCount > 0 && <View style={styles.activityNavBadge}><Text style={styles.activityNavBadgeText}>{activityCount > 9 ? '9+' : activityCount}</Text></View>}
+                </View>
+                <Text numberOfLines={1} style={styles.navLabelPro}>{item.label}</Text>
+              </View>
+            )}
           </Pressable>
         )
       })}
@@ -1588,7 +3318,47 @@ function BottomNavigationPro({ tab, onChange }: { tab: Tab; onChange: (tab: Tab)
   )
 }
 
-const styles = StyleSheet.create({
+const DARK_STYLE_COLORS: Record<string, Record<string, string>> = {
+  backgroundColor: {
+    '#f7f9fc': '#0b1220',
+    '#ffffff': '#111c2e',
+    '#fff': '#111c2e',
+    '#eaf5fc': '#1b2a40',
+    '#f8fafc': '#111c2e',
+    '#f1f5f9': '#1b2a40',
+    '#f2f6fa': '#1b2a40',
+    '#f1f8ff': '#14243a',
+    '#f1fbf5': '#14291f',
+    '#f4f8fb': '#162338',
+    '#f4faff': '#162338',
+    '#f0f7fc': '#162338',
+    '#f6f9fc': '#162338',
+  },
+  color: {
+    '#142b45': '#e5eef9',
+    '#073b68': '#dbeafe',
+    '#082d50': '#dbeafe',
+    '#64748b': '#b7c5d8',
+    '#475569': '#cbd5e1',
+    '#334155': '#dbe4f0',
+    '#0f172a': '#f1f5f9',
+    '#1e293b': '#e2e8f0',
+    '#102746': '#dbe4f0',
+    '#7a8da3': '#a7b6c8',
+    '#667d99': '#b5c5d9',
+    '#5e7491': '#b5c5d9',
+  },
+  borderColor: {
+    '#dfe7ef': '#29384d',
+    '#eaf0f6': '#29384d',
+    '#dceaf4': '#29384d',
+    '#d7e7f2': '#34455d',
+    '#dbeaf8': '#29384d',
+    '#cbd5e1': '#40516a',
+  },
+}
+
+const styles = new Proxy(StyleSheet.create({
   splashRoot: { position: 'absolute', zIndex: 100, top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: '#061A32' },
   splashGlowOne: { position: 'absolute', width: 390, height: 390, top: -155, right: -105, borderRadius: 195, backgroundColor: 'rgba(0, 102, 164, 0.48)' },
   splashGlowTwo: { position: 'absolute', width: 330, height: 330, bottom: -155, left: -125, borderRadius: 165, backgroundColor: 'rgba(39, 197, 245, 0.18)' },
@@ -1619,6 +3389,10 @@ const styles = StyleSheet.create({
   splashPercent: { color: '#D9F7FF', fontSize: 11, fontWeight: '800', textAlign: 'right', marginTop: 8 },
   splashFooter: { position: 'absolute', bottom: 34, color: 'rgba(217, 247, 255, 0.62)', fontSize: 9, fontWeight: '800', letterSpacing: 1.8 },
   splashReveal: { position: 'absolute', width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.background },
+  appRoot: { flex: 1 },
+  appSurface: { flex: 1, overflow: 'hidden', transformOrigin: 'left center' },
+  appDim: { backgroundColor: '#000000' },
+  appContent: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: COLORS.background },
   header: { position: 'relative', minHeight: 82, flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, overflow: 'hidden', backgroundColor: COLORS.deep },
   headerGlow: { position: 'absolute', width: 250, height: 150, right: -80, bottom: -105, borderRadius: 125, backgroundColor: 'rgba(39,197,245,0.25)' },
@@ -1634,17 +3408,72 @@ const styles = StyleSheet.create({
   headerSubtitle: { color: '#C7E5F7', fontSize: 13, marginTop: 3 },
   menuButton: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.12)' },
   menuText: { color: COLORS.surface, fontSize: 24, fontWeight: '800' },
-  menuOverlay: { flex: 1, justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: 88, paddingHorizontal: SPACING.lg, backgroundColor: COLORS.overlay },
-  menuPanel: { width: '92%', padding: SPACING.lg, borderRadius: RADIUS.xl, backgroundColor: COLORS.surface, ...SHADOW.hero },
-  menuPanelHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  menuLogo: { width: 48, height: 48, borderRadius: RADIUS.md, marginRight: SPACING.md },
-  menuPanelTitle: { color: COLORS.text, fontSize: 20, fontWeight: '900' },
-  menuPanelSubtitle: { color: COLORS.muted, fontSize: 12, marginTop: 3 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 58, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  menuItemText: { color: COLORS.text, fontSize: 16, fontWeight: '800' },
-  menuItemChevron: { color: COLORS.primary, fontSize: 25 },
-  menuClose: { alignItems: 'center', marginTop: SPACING.lg, padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.light },
-  menuCloseText: { color: COLORS.primary, fontSize: 14, fontWeight: '900' },
+  sideMenuScrim: { backgroundColor: 'rgba(3,12,32,0.55)' },
+  sideMenuScrimPressable: { flex: 1 },
+  sideMenuPanel: { position: 'absolute', right: 0, overflow: 'hidden', borderTopLeftRadius: 36, borderBottomLeftRadius: 36, elevation: 24, shadowColor: '#000000', shadowOpacity: 0.4, shadowRadius: 30 },
+  sideMenuHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 22, paddingBottom: 16 },
+  sideMenuLogo: { width: 56, height: 56, borderRadius: 17 },
+  sideMenuBrand: { flex: 1 },
+  sideMenuTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700' },
+  sideMenuSubtitle: { color: '#B9D8FF', fontSize: 13 },
+  sideMenuCloseIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.12)' },
+  sideMenuStatus: { flexDirection: 'row', alignItems: 'center', gap: 9, alignSelf: 'flex-start', marginHorizontal: 22, marginBottom: 14, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(74,222,128,0.35)', backgroundColor: 'rgba(34,197,94,0.16)' },
+  sideMenuStatusOff: { borderColor: 'rgba(252,211,77,0.35)', backgroundColor: 'rgba(245,158,11,0.16)' },
+  sideMenuStatusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
+  sideMenuStatusDotOff: { backgroundColor: '#F59E0B' },
+  sideMenuStatusText: { color: '#86EFAC', fontSize: 12.5, fontWeight: '500' },
+  sideMenuStatusTextOff: { color: '#FCD34D' },
+  sideMenuLabel: { color: '#9FC4F5', fontSize: 11, fontWeight: '600', letterSpacing: 2, paddingHorizontal: 24, paddingBottom: 10 },
+  sideMenuItems: { paddingHorizontal: 14, gap: 8 },
+  sideMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 11, borderWidth: 1, borderColor: 'transparent', borderRadius: 20 },
+  sideMenuItemActive: { borderColor: 'rgba(255,255,255,0.24)', backgroundColor: 'rgba(255,255,255,0.16)' },
+  sideMenuItemPressed: { transform: [{ scale: 0.97 }] },
+  sideMenuActiveBar: { position: 'absolute', top: 18, bottom: 18, left: -14, width: 4, borderRadius: 4, backgroundColor: '#19D3FF' },
+  sideMenuItemIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.12)' },
+  sideMenuItemIconActive: { backgroundColor: '#12AEF2' },
+  sideMenuItemCopy: { flex: 1 },
+  sideMenuItemTitle: { color: '#FFFFFF', fontSize: 14.5, fontWeight: '600' },
+  sideMenuItemSubtitle: { color: '#B4D2F7', fontSize: 11, marginTop: 1, lineHeight: 15 },
+  sideMenuSpacer: { flex: 1 },
+  sideMenuFooter: { paddingHorizontal: 18, paddingTop: 14 },
+  sideMenuCloseButton: { height: 54, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.14)' },
+  sideMenuCloseText: { color: '#FFFFFF', fontSize: 15.5, fontWeight: '600' },
+  sideMenuBank: { color: '#8FB6EA', fontSize: 10.5, letterSpacing: 1.5, textAlign: 'center', marginTop: 12 },
+  sideMenuScroll: { flexGrow: 1, flexShrink: 1, minHeight: 0 },
+  sideMenuScrollContent: { flexGrow: 1, paddingBottom: 14 },
+  sideMenuSettings: { marginHorizontal: 18, marginTop: 22, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.18)' },
+  sideMenuSectionTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', marginBottom: 12 },
+  sideMenuSettingLabel: { color: '#D5E7FF', fontSize: 12, fontWeight: '700', marginBottom: 8 },
+  sideMenuChoices: { gap: 5 },
+  sideMenuChoice: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 34, paddingHorizontal: 9, borderRadius: 11 },
+  sideMenuChoiceSelected: { backgroundColor: 'rgba(255,255,255,0.15)' },
+  sideMenuChoiceText: { flex: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  sideMenuRadio: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.72)', borderRadius: 9 },
+  sideMenuRadioSelected: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#FFFFFF' },
+  sideMenuLanguageLabel: { marginTop: 13 },
+  sideMenuLanguageRow: { flexDirection: 'row', gap: 8 },
+  sideMenuLanguageOption: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 38, paddingHorizontal: 8, borderRadius: 11 },
+  sideMenuLanguageSelected: { backgroundColor: 'rgba(255,255,255,0.15)' },
+  sideMenuQuickLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginHorizontal: 18, marginTop: 15 },
+  sideMenuQuickLink: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', minHeight: 38, paddingHorizontal: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)', borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)' },
+  sideMenuQuickLinkText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  hoursModalRoot: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(3,12,32,0.48)' },
+  hoursModalPanel: { maxHeight: '82%', paddingBottom: 24, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: COLORS.surface },
+  hoursModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 22, paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  hoursModalTitleGroup: { flex: 1 },
+  hoursModalTitle: { color: COLORS.text, fontSize: 20, fontWeight: '900' },
+  hoursModalSubtitle: { color: COLORS.primary, fontSize: 12, fontWeight: '800', marginTop: 4 },
+  hoursModalClose: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.border, borderRadius: 12 },
+  hoursModalList: { gap: 9, paddingHorizontal: 18, paddingVertical: 16 },
+  hoursModalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 63, paddingHorizontal: 15, paddingVertical: 9, borderWidth: 1, borderRadius: 14 },
+  hoursModalRowOpen: { borderColor: '#BBE7CB', backgroundColor: '#F0FBF4' },
+  hoursModalRowClosed: { borderColor: '#F2C8C8', backgroundColor: '#FFF5F5' },
+  hoursModalDay: { color: COLORS.text, fontSize: 14, fontWeight: '900' },
+  hoursModalTime: { color: '#15803D', fontSize: 12, fontWeight: '700', marginTop: 3 },
+  hoursModalTimeClosed: { color: '#B91C1C' },
+  hoursModalBadge: { overflow: 'hidden', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99, backgroundColor: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  hoursModalBadgeOpen: { color: '#15803D' },
+  hoursModalBadgeClosed: { color: '#B91C1C' },
   agencyActionOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: COLORS.overlay },
   agencyActionSheet: { padding: SPACING.xl, paddingBottom: Platform.OS === 'ios' ? 34 : SPACING.xl, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: COLORS.surface, ...SHADOW.hero },
   agencyActionHandle: { alignSelf: 'center', width: 44, height: 5, marginBottom: SPACING.lg, borderRadius: 3, backgroundColor: '#CBD5E1' },
@@ -1664,33 +3493,55 @@ const styles = StyleSheet.create({
   agencyActionCancelText: { color: COLORS.muted, fontSize: 13, fontWeight: '900' },
   scrollContent: { padding: SPACING.xl, paddingBottom: 148, backgroundColor: COLORS.background },
   heroCarousel: { marginBottom: SPACING.xxl },
-  homeHero: { position: 'relative', width: '100%', height: MOBILE_BANNER_HEIGHT, padding: SPACING.xxl, borderRadius: 30, overflow: 'hidden', backgroundColor: COLORS.primary, ...SHADOW.hero },
-  heroSlide: { flexShrink: 0 },
-  heroSlideDark: { backgroundColor: COLORS.dark },
-  heroSlideDeep: { backgroundColor: COLORS.deep },
-  heroContent: { zIndex: 2, maxWidth: '78%' },
-  heroEyebrow: { color: '#D7F3FF', fontSize: 11, fontWeight: '900', letterSpacing: 1.3 },
-  heroAccentLine: { width: 48, height: 4, marginTop: 13, borderRadius: 2, backgroundColor: COLORS.accent },
-  heroTitle: { color: '#fff', fontSize: 30, lineHeight: 34, fontWeight: '900', marginTop: 13 },
-  heroText: { color: '#EAF5FC', fontSize: 14, lineHeight: 21, marginTop: 11 },
-  statusLine: { flexDirection: 'row', alignItems: 'center', marginTop: 18 },
+  homeBanner: { position: 'relative', height: 210, padding: 20, borderRadius: 28, overflow: 'hidden', ...SHADOW.hero },
+  homeBannerGlow: { position: 'absolute', width: 260, height: 260, right: -70, top: -70, borderRadius: 130, backgroundColor: 'rgba(25,211,255,0.35)' },
+  homeBannerRing: { position: 'absolute', width: 240, height: 240, right: -40, bottom: -90, borderRadius: 120, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  homeBannerCopy: { zIndex: 2, width: '64%' },
+  homeBannerCopyRTL: { width: '56%', paddingRight: 8 },
+  homeBannerTag: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 7, paddingHorizontal: 11, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', borderRadius: RADIUS.pill, backgroundColor: 'rgba(255,255,255,0.16)' },
+  homeBannerTagDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#19D3FF' },
+  homeBannerTagText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700', letterSpacing: 1.1 },
+  homeBannerTitle: { color: '#FFFFFF', fontSize: 20, lineHeight: 23, fontWeight: '700', marginTop: 11 },
+  homeBannerText: { color: 'rgba(255,255,255,0.84)', fontSize: 11.5, lineHeight: 16, marginTop: 6 },
+  homeBannerAction: { position: 'absolute', zIndex: 3, bottom: 18, minHeight: 38, maxWidth: '68%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16, borderRadius: RADIUS.pill, backgroundColor: '#FFFFFF', ...SHADOW.card },
+  homeBannerActionPressed: { transform: [{ scale: 0.96 }] },
+  homeBannerActionText: { color: '#0A3F9C', fontSize: 12, fontWeight: '700', flexShrink: 1 },
+  homeBannerActionTextRTL: { textAlign: 'right' },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
-  statusText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  heroAction: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginTop: 16, paddingHorizontal: 14, paddingVertical: 9, borderRadius: RADIUS.pill, backgroundColor: 'rgba(255,255,255,0.16)' },
-  heroActionText: { color: '#fff', fontSize: 12, fontWeight: '900' },
-  heroActionChevron: { color: '#fff', fontSize: 20, lineHeight: 17, marginLeft: 8 },
-  heroOrb: { position: 'absolute', width: 220, height: 220, right: -74, top: -65, borderRadius: 110, backgroundColor: 'rgba(39,197,245,0.22)' },
-  heroOrbCyan: { backgroundColor: 'rgba(39,197,245,0.28)' },
-  heroOrbLight: { backgroundColor: 'rgba(255,255,255,0.14)' },
-  heroOrbSmall: { position: 'absolute', width: 150, height: 150, right: -45, bottom: -72, borderRadius: 75, backgroundColor: 'rgba(255,255,255,0.12)' },
-  heroVisual: { position: 'absolute', right: 16, top: 50, width: 104, height: 150, alignItems: 'center', justifyContent: 'center', opacity: 0.88 },
-  heroVisualRing: { position: 'absolute', width: 142, height: 142, borderRadius: 71, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', transform: [{ rotate: '25deg' }] },
-  heroVisualBadge: { width: 82, height: 96, alignItems: 'center', justifyContent: 'center', borderRadius: 22, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', backgroundColor: 'rgba(255,255,255,0.16)', transform: [{ rotate: '-8deg' }] },
-  heroVisualSymbol: { color: '#fff', fontSize: 25, fontWeight: '900' },
-  heroVisualLabel: { color: '#D7F3FF', fontSize: 9, fontWeight: '900', letterSpacing: 2, marginTop: 5 },
+  bannerTicketArt: { position: 'absolute', top: 22, right: 12, width: 150, height: 160 },
+  bannerTicketRing: { position: 'absolute', top: 38, right: 30, width: 90, height: 90, borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)', borderRadius: 45 },
+  bannerTicketCard: { position: 'absolute', top: 22, right: 4, width: 118, height: 136, alignItems: 'center', paddingTop: 12, borderRadius: 18, backgroundColor: '#FFFFFF', transform: [{ rotate: '7deg' }], elevation: 10, shadowColor: '#00145A', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 12 } },
+  bannerTicketAgency: { color: '#4A78B8', fontSize: 9, fontWeight: '700', letterSpacing: 1.2 },
+  bannerTicketNumber: { color: '#0A4FA8', fontSize: 48, lineHeight: 50, fontWeight: '800', marginTop: 5 },
+  bannerTicketService: { color: '#0E2A55', fontSize: 11, fontWeight: '700' },
+  bannerTicketDivider: { width: '82%', marginTop: 10, borderTopWidth: 2, borderStyle: 'dashed', borderColor: '#CFE0F5' },
+  bannerTicketWait: { color: '#4A78B8', fontSize: 9, fontWeight: '600', marginTop: 6 },
+  bannerTicketChip: { position: 'absolute', top: 6, left: -6, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.pill, backgroundColor: '#FFFFFF', elevation: 8, shadowColor: '#00145A', shadowOpacity: 0.3, shadowRadius: 12 },
+  bannerTicketChipText: { color: '#0A3F9C', fontSize: 10, fontWeight: '700' },
+  bannerCalendarArt: { position: 'absolute', top: 22, right: 12, width: 150, height: 160 },
+  bannerCalendarCard: { position: 'absolute', top: 20, right: 2, width: 132, overflow: 'hidden', borderRadius: 18, backgroundColor: '#FFFFFF', transform: [{ rotate: '-6deg' }], elevation: 10, shadowColor: '#000A3C', shadowOpacity: 0.4, shadowRadius: 16, shadowOffset: { width: 0, height: 12 } },
+  bannerCalendarHeader: { height: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0A63E8' },
+  bannerCalendarHeaderText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  bannerCalendarGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 10 },
+  bannerCalendarDayWrap: { position: 'relative', width: 10, height: 10, alignItems: 'center', justifyContent: 'center' },
+  bannerCalendarDayPulse: { position: 'absolute', width: 14, height: 14, borderWidth: 1.5, borderColor: '#19D3FF', borderRadius: 7 },
+  bannerCalendarDay: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#E4EEFB' },
+  bannerCalendarDaySelected: { backgroundColor: '#0A63E8', borderWidth: 2, borderColor: '#19D3FF' },
+  bannerCalendarCheck: { position: 'absolute', top: 120, right: -2, width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: '#22C55E', elevation: 8, shadowColor: '#22C55E', shadowOpacity: 0.45, shadowRadius: 12 },
+  bannerScreenArt: { position: 'absolute', top: 22, right: 12, width: 150, height: 160 },
+  bannerSoundWave: { position: 'absolute', top: 2, right: 112, height: 26, flexDirection: 'row', alignItems: 'flex-end', gap: 3 },
+  bannerSoundBar: { width: 4, borderRadius: 3, backgroundColor: '#FFFFFF', opacity: 0.85 },
+  bannerScreenFrame: { position: 'absolute', top: 26, right: 0, width: 146, height: 106, alignItems: 'center', paddingHorizontal: 10, paddingTop: 8, borderWidth: 3, borderColor: '#1C355F', borderRadius: 14, backgroundColor: '#06142F', transform: [{ rotate: '5deg' }], elevation: 10, shadowColor: '#00145A', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 12 } },
+  bannerScreenLabel: { color: '#6FB4FF', fontSize: 7, fontWeight: '700', letterSpacing: 1.1 },
+  bannerScreenNumberWindow: { position: 'relative', width: '100%', height: 48, overflow: 'hidden', alignItems: 'center' },
+  bannerScreenNumber: { position: 'absolute', top: 0, color: '#4ADE80', fontSize: 42, lineHeight: 48, fontWeight: '800' },
+  bannerScreenNextNumber: { top: 0 },
+  bannerScreenCounter: { color: '#CFE6FF', fontSize: 9, fontWeight: '600' },
+  bannerScreenStand: { position: 'absolute', top: 128, right: 46, width: 54, height: 8, borderRadius: 4, backgroundColor: '#1C355F' },
   heroDots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 10 },
-  heroDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#C8D8E8' },
-  heroDotActive: { width: 22, backgroundColor: COLORS.primary },
+  heroDot: { width: 6, height: 6, overflow: 'hidden', borderRadius: RADIUS.pill, backgroundColor: '#C6D6EA' },
+  heroDotActive: { width: 30, height: 6, backgroundColor: '#C6D6EA' },
+  heroDotProgress: { height: '100%', borderRadius: RADIUS.pill, backgroundColor: '#0A63E8' },
   sectionTitle: { marginTop: SPACING.xxl, marginBottom: SPACING.md },
   eyebrow: { color: COLORS.primary, fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
   sectionHeading: { color: COLORS.text, fontSize: 22, fontWeight: '900', marginTop: SPACING.xs },
@@ -1711,32 +3562,65 @@ const styles = StyleSheet.create({
   activityEmptyTitle: { color: COLORS.text, fontSize: 14, fontWeight: '900', marginTop: SPACING.sm },
   activityEmptyText: { color: COLORS.muted, fontSize: 12, textAlign: 'center', marginTop: 4 },
   activitySubheading: { color: COLORS.text, fontSize: 15, fontWeight: '900', marginTop: SPACING.md, marginBottom: SPACING.sm },
-  activityTicketCard: { padding: SPACING.lg, marginBottom: SPACING.md, borderRadius: RADIUS.xl, backgroundColor: COLORS.dark, ...SHADOW.hero },
-  activityTicketCardCalled: { backgroundColor: '#062C52' },
-  activityTicketCardClosed: { backgroundColor: '#64748B' },
-  activityTicketHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: SPACING.md },
+  activityHistoryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  activityHistoryDelete: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', marginTop: SPACING.md, marginBottom: SPACING.sm, borderRadius: 19, borderWidth: 1, borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
+  activityConfirmOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, backgroundColor: 'rgba(3,12,32,0.64)' },
+  activityConfirmCard: { width: '100%', maxWidth: 420, padding: SPACING.xl, borderRadius: 26, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, ...SHADOW.hero },
+  activityConfirmCardDark: { borderColor: '#28445D', backgroundColor: '#142638' },
+  activityConfirmIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.md, borderRadius: 16, backgroundColor: '#FEF2F2' },
+  activityConfirmTitle: { color: COLORS.text, fontSize: 20, fontWeight: '900' },
+  activityConfirmTitleDark: { color: '#E7EEF6' },
+  activityConfirmMessage: { color: COLORS.muted, fontSize: 14, lineHeight: 21, marginTop: SPACING.sm },
+  activityConfirmMessageDark: { color: '#A5B5C5' },
+  activityConfirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.xl },
+  activityConfirmButton: { minWidth: 104, minHeight: 46, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.lg, borderRadius: RADIUS.md },
+  activityConfirmCancel: { borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  activityConfirmCancelDark: { borderColor: '#34495D', backgroundColor: '#1B3448' },
+  activityConfirmCancelText: { color: COLORS.primary, fontSize: 13, fontWeight: '800' },
+  activityConfirmCancelTextDark: { color: '#70BFF2' },
+  activityConfirmDelete: { backgroundColor: COLORS.primary },
+  activityConfirmDeleteText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
+  activityConfirmButtonDisabled: { opacity: 0.65 },
+  activityTicketCard: { position: 'relative', padding: SPACING.md, marginBottom: SPACING.md, overflow: 'hidden', borderRadius: 26, borderWidth: 1, borderColor: 'rgba(63,185,255,0.42)', backgroundColor: COLORS.dark, ...SHADOW.hero },
+  activityTicketCardCalled: { borderColor: 'rgba(45,235,184,0.65)' },
+  activityTicketHistoryCard: { minHeight: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: SPACING.sm, borderRadius: 18, borderColor: 'rgba(203,213,225,0.28)' },
+  activityTicketHistoryNumber: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
+  activityTicketHistoryStatus: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: RADIUS.pill, backgroundColor: 'rgba(100,116,139,0.45)' },
+  activityTicketHistoryStatusText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  activityTicketOrb: { position: 'absolute', top: -95, right: -72, width: 205, height: 205, borderRadius: 103, borderWidth: 1, borderColor: 'rgba(39,197,245,0.14)', backgroundColor: 'rgba(39,197,245,0.06)' },
+  activityTicketHeader: { zIndex: 1, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: SPACING.sm },
+  activityTicketIdentity: { flex: 1, minWidth: 0 },
+  activityTicketAgency: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   activityCardEyebrow: { color: '#9DEBFF', fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
-  activityTicketNumber: { color: '#FFFFFF', fontSize: 25, fontWeight: '900', marginTop: 4 },
-  activityTicketService: { color: '#BBD9EB', fontSize: 12, fontWeight: '700', marginTop: 3 },
-  activityStatusPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, paddingVertical: 7, borderRadius: RADIUS.pill, backgroundColor: 'rgba(255,255,255,0.12)', maxWidth: '45%' },
-  activityStatusPillCalled: { backgroundColor: 'rgba(39,197,245,0.22)' },
-  activityStatusPillClosed: { backgroundColor: 'rgba(255,255,255,0.1)' },
-  activityLiveDot: { width: 7, height: 7, borderRadius: 4, marginRight: 5, backgroundColor: '#27C5F5' },
+  activityTicketNumber: { color: '#FFFFFF', fontSize: 27, lineHeight: 32, fontWeight: '900', marginTop: 5, letterSpacing: 0.2 },
+  activityTicketServiceChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, maxWidth: '88%', paddingHorizontal: 10, paddingVertical: 5, marginTop: 5, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: 'rgba(99,177,255,0.22)', backgroundColor: 'rgba(8,52,101,0.72)' },
+  activityTicketService: { flexShrink: 1, color: '#D8EDFF', fontSize: 11, fontWeight: '800' },
+  activityStatusPill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', maxWidth: '46%', paddingHorizontal: 9, paddingVertical: 7, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)', backgroundColor: 'rgba(10,95,137,0.72)' },
+  activityStatusPillCalled: { borderColor: 'rgba(45,235,184,0.55)', backgroundColor: 'rgba(5,150,105,0.84)' },
+  activityLiveDot: { width: 7, height: 7, borderRadius: 4, marginRight: 6, backgroundColor: '#38D9FF' },
   activityLiveDotCalled: { backgroundColor: '#4ADE80' },
-  activityLiveDotClosed: { backgroundColor: '#CBD5E1' },
   activityStatusText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900', flexShrink: 1 },
-  activityTicketLead: { color: '#FFFFFF', fontSize: 14, fontWeight: '900', letterSpacing: 1, marginTop: SPACING.lg },
-  activityTicketStats: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: SPACING.md },
-  activityPeopleAhead: { color: '#FFFFFF', fontSize: 22, fontWeight: '900' },
-  activityPeopleAheadLabel: { fontSize: 12, fontWeight: '700' },
-  activityProgressText: { color: '#9DEBFF', fontSize: 18, fontWeight: '900' },
-  activityProgressTrack: { height: 11, overflow: 'hidden', marginTop: SPACING.sm, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.16)' },
-  activityProgressFill: { height: '100%', borderRadius: 6, backgroundColor: '#149BEF' },
-  activityTicketFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: SPACING.lg, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
-  activityFooterRight: { alignItems: 'flex-end' },
+  activityTicketCallout: { zIndex: 1, minHeight: 86, flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginTop: SPACING.md },
+  activityTicketCallIcon: { position: 'relative', width: 60, height: 60, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 30, borderWidth: 2, borderColor: 'rgba(39,197,245,0.66)', backgroundColor: 'rgba(0,120,195,0.22)', shadowColor: '#10CFFF', shadowOpacity: 0.28, shadowRadius: 12, elevation: 4 },
+  activityTicketCallPulse: { position: 'absolute', top: -4, right: -4, bottom: -4, left: -4, borderWidth: 2, borderColor: '#25DFFF', borderRadius: 34 },
+  activityTicketCallCopy: { flex: 1, minWidth: 0 },
+  activityTicketLead: { color: '#FFFFFF', fontSize: 17, lineHeight: 21, fontWeight: '900', letterSpacing: 0.3 },
+  activityTicketLeadCalled: { color: '#39DFFF', fontStyle: 'italic', fontSize: 19, lineHeight: 23 },
+  activityTicketCallHint: { color: '#BBD9EB', fontSize: 11, fontWeight: '700', marginTop: 5 },
+  activityTicketProgressPanel: { zIndex: 1, padding: SPACING.md, marginTop: SPACING.sm, borderRadius: 21, borderWidth: 1, borderColor: 'rgba(34,130,255,0.32)', backgroundColor: 'rgba(3,27,73,0.55)' },
+  activityTicketStats: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: SPACING.sm },
+  activityPeopleAhead: { flex: 1, color: '#FFFFFF', fontSize: 25, fontWeight: '900' },
+  activityPeopleAheadLabel: { color: '#D3E5FF', fontSize: 12, fontWeight: '700' },
+  activityProgressText: { color: '#39E4FF', fontSize: 25, fontWeight: '900' },
+  activityProgressTrack: { height: 12, overflow: 'hidden', marginTop: SPACING.sm, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(44,196,255,0.45)', backgroundColor: 'rgba(255,255,255,0.13)' },
+  activityProgressFill: { height: '100%', borderRadius: 6, backgroundColor: '#10CFFF', shadowColor: '#15D9FF', shadowOpacity: 0.85, shadowRadius: 8, elevation: 2 },
+  activityTicketFooter: { zIndex: 1, minHeight: 67, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.sm, paddingHorizontal: SPACING.sm, marginTop: SPACING.md, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(44,140,255,0.24)', backgroundColor: 'rgba(7,42,83,0.62)' },
+  activityTicketMetric: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  activityTicketMetricRight: { justifyContent: 'flex-end' },
+  activityMetricIcon: { width: 30, height: 30, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: 'rgba(16,207,255,0.12)' },
+  activityMetricDivider: { width: 1, height: 36, backgroundColor: 'rgba(118,185,255,0.2)' },
   activityMetaLabel: { color: '#91B7D2', fontSize: 9, fontWeight: '900', letterSpacing: 0.6 },
-  activityMetaValue: { color: '#FFFFFF', fontSize: 15, fontWeight: '900', marginTop: 3 },
-  activityGuichet: { color: '#D9F7FF', fontSize: 12, fontWeight: '800', marginTop: SPACING.md },
+  activityMetaValue: { color: '#FFFFFF', fontSize: 16, fontWeight: '900', marginTop: 3 },
   activityAppointmentCard: { padding: SPACING.lg, marginBottom: SPACING.md, borderRadius: RADIUS.xl, borderWidth: 1, borderColor: '#CFE3F0', backgroundColor: '#FFFFFF', ...SHADOW.card },
   activityAppointmentHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   activityAppointmentIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: COLORS.primary },
@@ -1751,11 +3635,9 @@ const styles = StyleSheet.create({
   activityCancelButton: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 9, marginTop: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: '#FCA5A5' },
   activityCancelButtonText: { color: '#B91C1C', fontSize: 11, fontWeight: '900' },
   actionCard: { flexDirection: 'row', alignItems: 'center', minHeight: 86, padding: SPACING.md, marginBottom: SPACING.md, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, ...SHADOW.card },
-  primaryCard: { borderColor: COLORS.primary, backgroundColor: COLORS.primary },
+  primaryCard: { borderColor: '#0754D8', backgroundColor: '#0754D8', overflow: 'hidden' },
   actionIcon: { width: 52, height: 52, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.light },
   primaryIcon: { backgroundColor: 'rgba(255,255,255,.15)' },
-  actionIconText: { color: COLORS.primary, fontSize: 22, fontWeight: '800' },
-  primaryIconText: { color: '#fff' },
   actionCopy: { flex: 1, marginLeft: SPACING.md },
   actionTitle: { color: COLORS.text, fontSize: 16, fontWeight: '900' },
   actionDescription: { color: COLORS.muted, fontSize: 12, lineHeight: 17, marginTop: SPACING.xs },
@@ -1783,6 +3665,16 @@ const styles = StyleSheet.create({
   radio: { color: COLORS.primary, fontSize: 20 },
   searchLabel: { color: COLORS.text, fontSize: 12, fontWeight: '800', marginBottom: SPACING.sm },
   searchInput: { minHeight: 50, paddingHorizontal: SPACING.md, marginBottom: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, color: COLORS.text, fontSize: 14, backgroundColor: COLORS.surface },
+  advisorSearchBox: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, marginBottom: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  advisorSearchInput: { flex: 1, minWidth: 0, paddingVertical: SPACING.sm, color: COLORS.text, fontSize: 14 },
+  advisorGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  advisorCard: { width: '48.5%', minHeight: 138, padding: SPACING.md, marginBottom: SPACING.md, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, ...SHADOW.card },
+  advisorCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.sm },
+  advisorInitials: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, backgroundColor: COLORS.light },
+  advisorInitialsText: { color: COLORS.primary, fontSize: 12, fontWeight: '900' },
+  advisorName: { color: COLORS.text, fontSize: 13, lineHeight: 17, fontWeight: '900' },
+  advisorAgency: { color: COLORS.muted, fontSize: 10, fontWeight: '700', marginTop: SPACING.xs },
+  advisorEmpty: { width: '100%', padding: SPACING.lg, color: COLORS.muted, fontSize: 13, textAlign: 'center' },
   stepProgress: { padding: SPACING.lg, marginBottom: SPACING.md, borderRadius: RADIUS.lg, backgroundColor: COLORS.light },
   stepProgressHeader: { flexDirection: 'row', alignItems: 'center' },
   stepNumber: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: COLORS.primary },
@@ -1793,7 +3685,7 @@ const styles = StyleSheet.create({
   stepProgressDescription: { color: '#6B8AAE', fontSize: 12, marginTop: 3 },
   stepTrack: { height: 6, marginTop: SPACING.md, overflow: 'hidden', borderRadius: 3, backgroundColor: '#D9E8F3' },
   stepFill: { height: 6, borderRadius: 3, backgroundColor: COLORS.primary },
-  screenHero: { position: 'relative', width: '100%', height: MOBILE_BANNER_HEIGHT, padding: SPACING.xl, marginBottom: SPACING.lg, overflow: 'hidden', borderRadius: 28, backgroundColor: COLORS.dark, ...SHADOW.hero },
+  screenHero: { position: 'relative', width: '100%', height: 160, padding: SPACING.lg, marginBottom: SPACING.lg, overflow: 'hidden', borderRadius: 28, backgroundColor: COLORS.dark, ...SHADOW.hero },
   screenHeroOrb: { position: 'absolute', width: 210, height: 210, right: -82, top: -78, borderRadius: 105, backgroundColor: 'rgba(39,197,245,0.24)' },
   screenHeroCopy: { zIndex: 2, maxWidth: '78%' },
   screenHeroEyebrow: { color: '#9DEBFF', fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
@@ -1801,19 +3693,19 @@ const styles = StyleSheet.create({
   screenHeroText: { color: '#D7EDF8', fontSize: 12, lineHeight: 18, marginTop: 8 },
   screenHeroBadge: { position: 'absolute', right: 18, bottom: 18, width: 52, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 26, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.12)' },
   screenHeroBadgeText: { color: COLORS.surface, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
-  screenDisplayWelcome: { position: 'relative', minHeight: 228, padding: SPACING.lg, marginBottom: SPACING.lg, overflow: 'hidden', borderRadius: RADIUS.xl, borderWidth: 1, borderColor: '#D5E7F5', backgroundColor: '#EEF7FF', ...SHADOW.card },
+  screenDisplayWelcome: { position: 'relative', minHeight: 180, padding: SPACING.md, marginBottom: SPACING.lg, overflow: 'hidden', borderRadius: RADIUS.xl, borderWidth: 1, borderColor: '#D5E7F5', backgroundColor: '#EEF7FF', ...SHADOW.card },
   screenDisplayOrbTop: { position: 'absolute', width: 150, height: 150, right: -70, top: -72, borderRadius: 75, backgroundColor: 'rgba(0,102,164,0.10)' },
   screenDisplayOrbBottom: { position: 'absolute', width: 120, height: 120, left: -65, bottom: -70, borderRadius: 60, backgroundColor: 'rgba(0,102,164,0.10)' },
   screenDisplayBrand: { flexDirection: 'row', alignItems: 'center', zIndex: 2 },
-  screenDisplayLogoFrame: { width: 68, height: 78, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.lg, borderWidth: 1, borderColor: '#D5E7F5', backgroundColor: COLORS.surface, ...SHADOW.card },
-  screenDisplayLogo: { width: 54, height: 66, resizeMode: 'contain' },
+  screenDisplayLogoFrame: { width: 54, height: 58, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.lg, borderWidth: 1, borderColor: '#D5E7F5', backgroundColor: COLORS.surface, ...SHADOW.card },
+  screenDisplayLogo: { width: 44, height: 48, resizeMode: 'contain' },
   screenDisplayBrandCopy: { flex: 1, marginLeft: SPACING.lg },
   screenDisplayBrandName: { color: COLORS.primary, fontSize: 14, fontWeight: '900', letterSpacing: 0.8 },
   screenDisplayAgency: { color: COLORS.text, fontSize: 18, fontWeight: '900', marginTop: 5 },
   screenDisplayCity: { color: COLORS.muted, fontSize: 11, fontWeight: '600', marginTop: 3 },
-  screenDisplayWelcomeTitle: { paddingLeft: SPACING.md, marginTop: 20, borderLeftWidth: 4, borderLeftColor: COLORS.primary, zIndex: 2 },
-  screenDisplayWelcomeText: { color: COLORS.deep, fontSize: 27, lineHeight: 31, fontWeight: '900' },
-  screenDisplayStatusRow: { flexDirection: 'row', alignItems: 'center', paddingTop: SPACING.md, marginTop: SPACING.lg, borderTopWidth: 1, borderTopColor: '#D5E7F5', zIndex: 2 },
+  screenDisplayWelcomeTitle: { paddingLeft: SPACING.md, marginTop: SPACING.md, borderLeftWidth: 4, borderLeftColor: COLORS.primary, zIndex: 2 },
+  screenDisplayWelcomeText: { color: COLORS.deep, fontSize: 22, lineHeight: 25, fontWeight: '900' },
+  screenDisplayStatusRow: { flexDirection: 'row', alignItems: 'center', paddingTop: SPACING.sm, marginTop: SPACING.sm, borderTopWidth: 1, borderTopColor: '#D5E7F5', zIndex: 2 },
   screenDisplayStatusDot: { width: 8, height: 8, marginRight: 6, borderRadius: 4 },
   screenDisplayStatusText: { fontSize: 11, fontWeight: '900' },
   screenDisplayStatusHours: { color: COLORS.muted, fontSize: 11, fontWeight: '700', marginLeft: 'auto' },
@@ -1823,9 +3715,9 @@ const styles = StyleSheet.create({
   screenClosedLabelText: { color: COLORS.surface, fontSize: 23, fontWeight: '900', marginLeft: SPACING.sm },
   screenClosedText: { color: '#991B1B', fontSize: 14, lineHeight: 21, fontWeight: '700', textAlign: 'center', marginTop: SPACING.lg },
   screenClosedHours: { color: '#B91C1C', fontSize: 12, fontWeight: '800', marginTop: SPACING.md },
-  screenSearchBox: { flexDirection: 'row', alignItems: 'center', height: 50, paddingHorizontal: SPACING.md, marginBottom: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
-  screenSearchIcon: { color: COLORS.primary, fontSize: 24, marginRight: SPACING.sm },
-  screenSearchInput: { flex: 1, minWidth: 0, paddingVertical: 0, color: COLORS.text, fontSize: 13 },
+  screenSearchBox: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, height: 56, paddingHorizontal: SPACING.md, marginBottom: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  screenSearchSticky: { zIndex: 2, elevation: 4 },
+  screenSearchInput: { flex: 1, minWidth: 0, height: 48, paddingHorizontal: 0, paddingVertical: 0, includeFontPadding: false, textAlignVertical: 'center', color: COLORS.text, fontSize: 14 },
   screenResultsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.md },
   screenResultsCount: { color: COLORS.primary, fontSize: 14, fontWeight: '900' },
   screenResultsHint: { color: COLORS.muted, fontSize: 11, fontWeight: '700' },
@@ -2006,7 +3898,9 @@ const styles = StyleSheet.create({
   liveStatusDot: { width: 7, height: 7, marginRight: 5, borderRadius: 4 },
   liveStatusText: { color: COLORS.surface, fontSize: 9, fontWeight: '900' },
   liveNumberPanel: { minHeight: 112, alignItems: 'center', justifyContent: 'center', marginTop: SPACING.lg, borderRadius: RADIUS.lg, backgroundColor: 'rgba(255,255,255,0.10)' },
+  liveNumberPanelEmpty: { paddingHorizontal: SPACING.md },
   liveNumber: { color: COLORS.surface, fontSize: 68, lineHeight: 76, fontWeight: '900' },
+  liveNumberEmptyText: { color: '#D7EDF8', fontSize: 18, lineHeight: 24, textAlign: 'center' },
   liveGuichet: { color: '#E2F2FB', fontSize: 15, fontWeight: '800', textAlign: 'center', marginTop: SPACING.md },
   queueSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.md },
   liveSectionEyebrow: { color: COLORS.primary, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
@@ -2027,6 +3921,8 @@ const styles = StyleSheet.create({
   queueEmptyTitle: { color: COLORS.text, fontSize: 14, fontWeight: '900', marginTop: SPACING.sm },
   queueEmptyText: { color: COLORS.muted, fontSize: 12, marginTop: 4 },
   liveHintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: SPACING.lg },
+  liveUpdateDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.success },
+  liveUpdateDotError: { backgroundColor: COLORS.error },
   liveHint: { flex: 1, color: COLORS.muted, fontSize: 11, textAlign: 'center', marginLeft: 6 },
   emptyText: { padding: 18, color: '#94a3b8', fontSize: 12, textAlign: 'center' },
   bottomNav: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', paddingTop: SPACING.sm, paddingBottom: Platform.OS === 'ios' ? 25 : SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.surface, ...SHADOW.nav },
@@ -2037,13 +3933,26 @@ const styles = StyleSheet.create({
   navIcon: { color: '#7A8DA3', fontSize: 20 },
   navLabel: { color: '#7A8DA3', fontSize: 11, fontWeight: '800', marginTop: SPACING.xs },
   navActive: { color: COLORS.primary },
-  bottomNavPro: { position: 'absolute', left: 12, right: 12, bottom: 8, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-around', paddingTop: 7, paddingBottom: Platform.OS === 'ios' ? 10 : 8, borderRadius: 24, borderWidth: 1, borderColor: '#EAF0F6', backgroundColor: COLORS.surface, ...SHADOW.nav },
-  navItemPro: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', minHeight: 76 },
-  navPressedPro: { opacity: 0.78, transform: [{ scale: 0.98 }] },
-  navIconWrapPro: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 16 },
-  navIconWrapActivePro: { backgroundColor: '#0D86E8', shadowColor: '#0D86E8', shadowOpacity: 0.25, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 5 },
-  navLabelPro: { color: '#667D99', fontSize: 10, fontWeight: '700', marginTop: 3, textAlign: 'center' },
-  navLabelActivePro: { color: '#0B72CE', fontWeight: '900' },
-  navIndicatorPro: { width: 38, height: 4, marginTop: 6, borderRadius: 2, backgroundColor: '#0D86E8' },
-  navIndicatorHiddenPro: { opacity: 0 },
+  bottomNavPro: { position: 'absolute', left: 12, right: 12, bottom: 8, minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 5, overflow: 'hidden', borderRadius: 28, borderWidth: 1, borderColor: 'rgba(116,177,255,0.72)', backgroundColor: '#0A1B3B', shadowColor: '#006DFF', shadowOpacity: 0.24, shadowRadius: 18, shadowOffset: { width: 0, height: 7 }, elevation: 12 },
+  bottomNavProDark: { borderColor: 'rgba(73,154,255,0.78)', shadowOpacity: 0.34 },
+  navItemPro: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', minHeight: 60, borderRadius: 23 },
+  navPressedPro: { opacity: 0.8, transform: [{ scale: 0.96 }] },
+  navInactiveContentPro: { width: '100%', minHeight: 60, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  navIconContainer: { position: 'relative', width: 26, height: 25, alignItems: 'center', justifyContent: 'center' },
+  activityNavBadge: { position: 'absolute', top: -4, right: -9, minWidth: 17, height: 17, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: '#0A1B3B', backgroundColor: '#EF3340' },
+  activityNavBadgeText: { color: '#FFFFFF', fontSize: 9, lineHeight: 12, fontWeight: '900', textAlign: 'center' },
+  navActiveCapsulePro: { position: 'relative', width: '100%', minHeight: 60, alignItems: 'center', justifyContent: 'center', gap: 2, overflow: 'hidden', borderRadius: 23, shadowColor: '#0988FF', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
+  navActiveGlowPro: { position: 'absolute', left: '22%', right: '22%', bottom: 2, height: 3, borderRadius: 2, backgroundColor: '#8EEBFF', shadowColor: '#52DFFF', shadowOpacity: 1, shadowRadius: 7, elevation: 4 },
+  navLabelPro: { maxWidth: '100%', color: '#C4D5F2', fontSize: 9, fontWeight: '700', marginTop: 2, textAlign: 'center' },
+  navLabelActivePro: { maxWidth: '100%', color: '#FFFFFF', fontSize: 9, fontWeight: '900', marginTop: 2, textAlign: 'center' },
+}), {
+  get(target, property, receiver) {
+    const style = Reflect.get(target, property, receiver)
+    if (!activeDarkMode || !style || typeof style !== 'object') return style
+    return Object.fromEntries(Object.entries(style).map(([key, value]) => {
+      if (typeof value !== 'string') return [key, value]
+      const replacement = DARK_STYLE_COLORS[key]?.[value.toLowerCase()]
+      return [key, replacement ?? value]
+    }))
+  },
 })

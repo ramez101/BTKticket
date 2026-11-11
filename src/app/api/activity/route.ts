@@ -5,6 +5,7 @@ import { isExpoPushToken } from '@/lib/push'
 import { todayTunisDate } from '@/lib/appointments'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 function getProgress(initialPosition: number, peopleAhead: number, status: string) {
   if (status !== 'WAITING') return 100
@@ -61,26 +62,32 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: 'desc' },
   })
 
-  const tickets = []
-  const seenTickets = new Set<number>()
+  const ticketSubscriptions = new Map<number, typeof subscriptions[number]>()
   for (const subscription of subscriptions) {
+    if (subscription.ticket && !ticketSubscriptions.has(subscription.ticket.id)) {
+      ticketSubscriptions.set(subscription.ticket.id, subscription)
+    }
+  }
+
+  const tickets = await Promise.all([...ticketSubscriptions.values()].map(async subscription => {
     const ticket = subscription.ticket
-    if (!ticket || seenTickets.has(ticket.id)) continue
-    seenTickets.add(ticket.id)
+    if (!ticket) return null
 
     const active = ticket.status === 'WAITING' || ticket.status === 'CALLED'
-    const peopleAhead = active && ticket.status === 'WAITING' ? await getPeopleAhead(ticket) : 0
-    const waitTime = active && ticket.status === 'WAITING'
-      ? await getAgencyWaitTime({
-        agencyId: ticket.agencyId,
-        dayDate: ticket.dayDate,
-        waitingCount: peopleAhead + 1,
-        targetTicketNumber: ticket.number,
-        targetService: ticket.service,
-      })
-      : null
+    const [peopleAhead, waitTime] = active && ticket.status === 'WAITING'
+      ? await Promise.all([
+        getPeopleAhead(ticket),
+        getAgencyWaitTime({
+          agencyId: ticket.agencyId,
+          dayDate: ticket.dayDate,
+          waitingCount: 0,
+          targetTicketNumber: ticket.number,
+          targetService: ticket.service,
+        }),
+      ])
+      : [0, null] as const
 
-    tickets.push({
+    return {
       id: ticket.id,
       number: ticket.number,
       service: ticket.service,
@@ -96,8 +103,8 @@ export async function GET(req: NextRequest) {
       guichet: ticket.guichet?.label ?? null,
       active,
       lastUpdatedAt: synchronizedAt.toISOString(),
-    })
-  }
+    }
+  })).then(items => items.filter((ticket): ticket is NonNullable<typeof ticket> => ticket !== null))
 
   const appointments = []
   const seenAppointments = new Set<number>()
@@ -125,5 +132,25 @@ export async function GET(req: NextRequest) {
   tickets.sort((a, b) => Number(b.active) - Number(a.active) || b.id - a.id)
   appointments.sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
 
-  return NextResponse.json({ tickets, appointments, updatedAt: synchronizedAt.toISOString() })
+  return NextResponse.json(
+    { tickets, appointments, updatedAt: synchronizedAt.toISOString() },
+    { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' } },
+  )
+}
+
+export async function DELETE(req: NextRequest) {
+  const token = req.nextUrl.searchParams.get('token')?.trim() || ''
+  if (!isExpoPushToken(token)) {
+    return NextResponse.json({ error: 'Token push invalide' }, { status: 400 })
+  }
+
+  const result = await prisma.pushSubscription.deleteMany({
+    where: {
+      token,
+      ticketId: { not: null },
+      ticket: { is: { status: { in: ['SERVED', 'ABSENT'] } } },
+    },
+  })
+
+  return NextResponse.json({ deleted: result.count })
 }

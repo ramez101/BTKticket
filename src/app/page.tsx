@@ -298,7 +298,7 @@ export default function Home() {
                 className="group inline-flex min-h-[58px] items-center justify-between gap-4 rounded-2xl border border-[#c5dced] bg-white/85 px-5 py-4 text-sm font-bold text-[#003a66] shadow-sm transition hover:-translate-y-0.5 hover:border-[#0065a1] hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#0065a1]/15 sm:text-base"
               >
                 <span className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#e7f2fb] text-[#0065a1]">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0065a1] text-white">
                     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                       <rect x="3.75" y="5.5" width="16.5" height="15" rx="2" />
                       <path d="M8 3.75v3.5m8-3.5v3.5M4 9.5h16m-11.5 4h3m-3 3.5h7" />
@@ -310,16 +310,18 @@ export default function Home() {
               </Link>
               <Link
                 href="/ecran"
-                className="group inline-flex min-h-[52px] items-center gap-3 rounded-2xl px-2 py-2 text-sm font-semibold text-[#0065a1] transition hover:text-[#003a66] focus:outline-none focus:underline sm:col-span-2"
+                className="group inline-flex min-h-[58px] items-center justify-between gap-4 rounded-2xl border border-[#c5dced] bg-white/85 px-5 py-4 text-sm font-bold text-[#003a66] shadow-sm transition hover:-translate-y-0.5 hover:border-[#0065a1] hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#0065a1]/15 sm:col-span-2 sm:text-base"
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#cfe4f7] bg-white/70">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                    <rect x="3.5" y="4.5" width="17" height="12.5" rx="2" />
-                    <path d="M8 21h8m-4-4v4m-5-9 3-3 2 2 4-4m0 0v3m0-3h-3" />
-                  </svg>
+                <span className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0065a1] text-white">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <rect x="3.5" y="4.5" width="17" height="12.5" rx="2" />
+                      <path d="M8 21h8m-4-4v4m-5-9 3-3 2 2 4-4m0 0v3m0-3h-3" />
+                    </svg>
+                  </span>
+                  Suivre votre tour en direct
                 </span>
-                Suivre votre tour en direct
-                <span className="transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+                <span className="text-lg text-[#0065a1] transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
               </Link>
             </div>
           </div>

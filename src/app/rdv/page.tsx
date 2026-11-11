@@ -27,6 +27,10 @@ type Charge = {
   appointmentCount?: number
 }
 
+function getChargeInitials(name: string) {
+  return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join('').toUpperCase() || '—'
+}
+
 type Slot = {
   time: string
   available: boolean
@@ -685,7 +689,7 @@ export default function RendezVousPage() {
                       className="rounded-2xl border border-[#dbeaf8] bg-white p-4 text-left transition hover:border-[#0065a1] hover:bg-[#f4fbff]"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <span className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-black text-btk-blue">{charge.code}</span>
+                        <span className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-black text-btk-blue">{getChargeInitials(charge.name)}</span>
                         <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-black text-green-700 ring-1 ring-green-100">
                           Disponible
                         </span>

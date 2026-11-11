@@ -54,7 +54,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     customerPhone: appointment.customerPhone,
     customerEmail: appointment.customerEmail,
     subject: appointment.subject,
-  }, 'cancellation')
+  }, 'cancellation', { calendarInvite: !outlook.synced })
 
   const dateLabel = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', timeZone: 'Africa/Tunis' })
     .format(new Date(`${appointment.date}T12:00:00Z`))

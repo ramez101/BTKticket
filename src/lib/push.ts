@@ -65,7 +65,11 @@ export function buildTicketProgressMessage(input: {
     : progressedTickets > 0
       ? `${progressedTickets} ticket${progressedTickets === 1 ? '' : 's'} vient${progressedTickets === 1 ? '' : 'nent'} d'être traité${progressedTickets === 1 ? '' : 's'}.`
       : 'Votre progression est suivie en temps réel.'
-  const tag = `ticket-progress-${input.ticketId}`
+  const tag = input.status === 'CALLED'
+    ? `ticket-called-${input.ticketId}`
+    : input.status === 'SERVED' || input.status === 'ABSENT'
+      ? `ticket-finished-${input.ticketId}`
+      : `ticket-approaching-${input.ticketId}`
   const estimatedWait = Math.max(0, Math.round(input.estimatedWait))
 
   return {
@@ -206,7 +210,7 @@ export async function notifyApproachingTickets(agencyId: number, dayDate: string
   const queue = await prisma.ticket.findMany({
     where: { agencyId, dayDate, status: 'WAITING', onHold: false },
     orderBy: [{ number: 'asc' }],
-    select: { id: true, number: true, service: true, initialPosition: true, approachNotifiedAt: true, lastPushState: true },
+    select: { id: true, number: true, service: true, initialPosition: true, approachNotifiedAt: true },
   })
 
   if (!queue.length) return null
@@ -230,9 +234,10 @@ export async function notifyApproachingTickets(agencyId: number, dayDate: string
   const notifications: PushMessage[] = []
   for (let index = 0; index < queue.length; index += 1) {
     const ticket = queue[index]
-    if (ticket.id === options.skipTicketId) continue
+    if (ticket.id === options.skipTicketId || index > 3 || ticket.approachNotifiedAt) continue
     const tokens = tokensByTicket.get(ticket.id)
     if (!tokens?.size) continue
+
     const waitTime = await getAgencyWaitTime({
       agencyId,
       dayDate,
@@ -252,34 +257,18 @@ export async function notifyApproachingTickets(agencyId: number, dayDate: string
       status: 'WAITING',
     })
 
-    const stateKey = JSON.stringify({
-      peopleAhead: index,
-      progress: message.data?.progress,
-      estimatedWait: waitTime.estimatedWait,
-      status: 'WAITING',
+    const markedApproach = await prisma.ticket.updateMany({
+      where: { id: ticket.id, status: 'WAITING', approachNotifiedAt: null },
+      data: { approachNotifiedAt: new Date() },
     })
-    if (ticket.lastPushState === stateKey) continue
+    if (!markedApproach.count) continue
 
-    const markedState = await prisma.ticket.updateMany({
-      where: {
-        id: ticket.id,
-        status: 'WAITING',
-        OR: [{ lastPushState: null }, { lastPushState: { not: stateKey } }],
-      },
-      data: { lastPushState: stateKey },
-    })
-    if (!markedState.count) continue
-
-    let alert = false
-    if (index === 3 && !ticket.approachNotifiedAt) {
-      const markedApproach = await prisma.ticket.updateMany({
-        where: { id: ticket.id, approachNotifiedAt: null },
-        data: { approachNotifiedAt: new Date() },
-      })
-      alert = markedApproach.count > 0
+    const finalMessage = {
+      ...message,
+      priority: 'high' as const,
+      sound: 'default' as const,
+      channelId: 'ticket-called',
     }
-
-    const finalMessage = alert ? { ...message, priority: 'high' as const, sound: 'default' as const, channelId: 'ticket-called' } : message
     for (const token of tokens) {
       notifications.push({ ...finalMessage, to: token })
     }
@@ -384,4 +373,3 @@ export async function notifyAppointmentReminders(now = new Date()) {
   if (!messages.length) return null
   return sendExpoMessages(messages)
 }
-

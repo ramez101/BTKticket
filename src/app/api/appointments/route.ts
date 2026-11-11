@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
         customerPhone: appointment.customerPhone,
         customerEmail: appointment.customerEmail,
         subject: appointment.subject,
-      }, 'confirmation')
+      }, 'confirmation', { calendarInvite: !outlook.synced })
 
       let pushNotification: unknown = { sent: false, reason: 'no-token' }
       if (isExpoPushToken(pushToken)) {
@@ -292,7 +292,7 @@ export async function DELETE(req: NextRequest) {
     customerPhone: result.appointment.customerPhone,
     customerEmail: result.appointment.customerEmail,
     subject: result.appointment.subject,
-  }, 'cancellation')
+  }, 'cancellation', { calendarInvite: !outlook.synced })
 
   const dateLabel = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', timeZone: 'Africa/Tunis' })
     .format(new Date(`${result.appointment.date}T12:00:00Z`))

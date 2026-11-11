@@ -18,35 +18,28 @@ npm install
 copy .env.example .env
 ```
 
-Dans `mobile/.env`, renseignez l'URL publique du serveur web :
+Configurez l'adresse de l'API directement dans `mobile/app.json`, dans `expo.extra.apiUrl` :
 
-```env
-EXPO_PUBLIC_API_URL=https://votre-domaine-btk-easy.com
+```json
+"apiUrl": "http://192.168.10.94:3000"
 ```
 
-Pour un téléphone réel, `localhost` ne pointe pas vers votre ordinateur. Utilisez l'adresse IP du PC sur le réseau local en développement, ou l'URL HTTPS de production.
+Remplacez l'adresse IP par celle du PC sur le réseau local. L'app utilise cette valeur en priorité ; elle ne la remplace pas par l'adresse du serveur Expo. Pour un téléphone réel, `localhost` ne pointe pas vers votre ordinateur.
 
 ```bash
-npm run start
+npm run dev:lan
 ```
 
 ### Tester avec Expo Go sur un téléphone
 
-Le fichier doit s'appeler exactement `mobile/.env` — et non `.env copy.example` — avec l'adresse IP du PC sur le même Wi-Fi que le téléphone :
-
-```env
-EXPO_PUBLIC_API_URL=http://192.168.10.92:3000
-```
-
-Sous Windows PowerShell, si Expo affiche `127.0.0.1` dans le QR code, forcez l'adresse LAN :
+Lancez le serveur Next.js depuis la racine du projet avec `npm run dev:lan`, puis Expo Go :
 
 ```powershell
-$expoHost = '192.168.10.92'
-$env:REACT_NATIVE_PACKAGER_HOSTNAME = $expoHost
-npm.cmd run start -- --go --lan --port 8083
+cd mobile
+npm.cmd run start:expo-go -- --clear
 ```
 
-Scannez ensuite le QR code avec Expo Go. Le téléphone et le PC doivent rester sur le même réseau. Si le port 8081 est libre, `--port 8083` peut être remplacé par `--port 8081`.
+Scannez ensuite le QR code avec Expo Go. Le téléphone et le PC doivent rester sur le même réseau. Si l'API ne s'ouvre pas non plus dans le navigateur du téléphone, vérifiez la connexion Wi-Fi et l'accès réseau au port 3000 du PC : modifier l'URL dans l'app ne peut pas démarrer le serveur ni ouvrir le pare-feu.
 
 Le projet utilise Expo SDK 57 avec React Native 0.86. Expo Go doit utiliser la même version de SDK. Sur Android, installez Expo Go SDK 57 si votre version du Play Store ne l'inclut pas encore. Sur un iPhone physique, utilisez un build Expo Go compatible via EAS si l'App Store ne propose pas encore SDK 57.
 

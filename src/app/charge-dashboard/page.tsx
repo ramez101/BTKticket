@@ -596,30 +596,61 @@ export default function ChargeDashboardPage() {
           </span>
         ) : undefined}
       />
-      <div className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <div className="charge-dashboard-content mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         {!connectedCharge ? (
-          <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-2xl items-center py-8">
-            <div className="w-full rounded-lg bg-white p-6 shadow-sm ring-1 ring-blue-100 sm:p-8">
-              <div className="text-center">
-                <p className="text-sm font-black uppercase tracking-[0.2em] text-btk-blue">Dashboard chargé</p>
-                <h1 className="mt-3 text-3xl font-black text-gray-950">Connexion chargé</h1>
-                <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-gray-600">
-                  Choisissez un chargé pour ouvrir sa session.
-                </p>
+          <section className="charge-login-shell mx-auto grid w-full max-w-6xl items-stretch gap-6 py-5 lg:grid-cols-[0.88fr_1.12fr] lg:gap-8 lg:py-10">
+            <div className="charge-login-intro">
+              <span className="charge-login-eyebrow">
+                <i aria-hidden="true" />
+                Espace professionnel
+              </span>
+              <h1>Votre activité, en toute simplicité.</h1>
+              <p>
+                Retrouvez vos rendez-vous et gérez vos disponibilités depuis un espace unique, pensé pour votre quotidien.
+              </p>
+              <div className="charge-login-benefits">
+                <div>
+                  <span aria-hidden="true">01</span>
+                  <p><strong>Accès personnalisé</strong><small>Un espace dédié à chaque chargé.</small></p>
+                </div>
+                <div>
+                  <span aria-hidden="true">02</span>
+                  <p><strong>Disponibilités maîtrisées</strong><small>Organisez vos créneaux et congés.</small></p>
+                </div>
+                <div>
+                  <span aria-hidden="true">03</span>
+                  <p><strong>Rendez-vous centralisés</strong><small>Consultez les prochaines réservations.</small></p>
+                </div>
               </div>
+              <div className="charge-login-security"><span aria-hidden="true">✓</span> Accès réservé aux collaborateurs BTK</div>
+            </div>
 
+            <div className="charge-login-card">
+              <div className="charge-login-card-heading">
+                <span className="charge-login-card-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+                  </svg>
+                </span>
+                <div>
+                  <p>Accès à votre espace</p>
+                  <h2>Connexion chargé</h2>
+                  <span>Choisissez votre profil pour continuer.</span>
+                </div>
+              </div>
               {notice && (
-                <div className="mt-5 rounded-lg bg-blue-50 px-4 py-3 text-sm font-semibold text-btk-blue ring-1 ring-blue-100">
+                <div className="charge-login-notice mt-5 rounded-lg bg-blue-50 px-4 py-3 text-sm font-semibold text-btk-blue ring-1 ring-blue-100">
                   {notice}
                 </div>
               )}
 
-              <div className="mt-6 space-y-4">
-                <label className="block text-sm font-black text-gray-700">
-                  Choisir un chargé
+              <div className="charge-login-form mt-6 space-y-4">
+                <label className="charge-login-search-label block text-sm font-black text-gray-700">
+                  <span>Rechercher votre profil</span>
                   <input
                     className="btk-input mt-2 w-full"
-                    placeholder="Écrire le nom, code ou agence"
+                    placeholder="Nom, matricule ou agence"
+                    aria-label="Rechercher un chargé par nom, code ou agence"
                     value={chargeSearch}
                     onChange={event => setChargeSearch(event.target.value)}
                     onKeyDown={event => {
@@ -630,7 +661,12 @@ export default function ChargeDashboardPage() {
                   />
                 </label>
 
-                <div className="max-h-72 overflow-y-auto rounded-lg border border-blue-100 bg-slate-50 p-2">
+                <div className="charge-login-list-wrap">
+                  <div className="charge-login-list-heading">
+                    <span>Chargés disponibles</span>
+                    {!loading && <span>{filteredCharges.length} profil{filteredCharges.length > 1 ? 's' : ''}</span>}
+                  </div>
+                  <div className="charge-login-list max-h-72 overflow-y-auto rounded-lg border border-blue-100 bg-slate-50 p-2">
                   {loading ? (
                     <div className="p-4 text-center text-sm font-semibold text-gray-400">Chargement...</div>
                   ) : filteredCharges.length === 0 ? (
@@ -644,7 +680,8 @@ export default function ChargeDashboardPage() {
                             key={charge.id}
                             type="button"
                             onClick={() => setSelectedChargeId(charge.id)}
-                            className={`w-full rounded-lg border px-4 py-3 text-left transition ${
+                            aria-pressed={active}
+                            className={`charge-login-option w-full rounded-lg border px-4 py-3 text-left transition ${
                               active
                                 ? 'border-btk-blue bg-blue-50 ring-2 ring-blue-100'
                                 : 'border-transparent bg-white hover:border-blue-100 hover:bg-blue-50/60'
@@ -664,11 +701,13 @@ export default function ChargeDashboardPage() {
                       })}
                     </div>
                   )}
+                  </div>
                 </div>
 
                 {selectedCharge && (
-                  <div className="rounded-lg bg-green-50 px-4 py-3 text-sm font-bold text-green-700 ring-1 ring-green-100">
-                    Sélection : {selectedCharge.name} - {selectedCharge.agencyName}
+                  <div className="charge-login-selected rounded-lg bg-green-50 px-4 py-3 text-sm font-bold text-green-700 ring-1 ring-green-100">
+                    <span className="charge-login-selected-check" aria-hidden="true">✓</span>
+                    <span><small>Profil sélectionné</small><strong>{selectedCharge.name}</strong><em>{selectedCharge.agencyCode} / {selectedCharge.agencyName}</em></span>
                   </div>
                 )}
 
@@ -676,7 +715,7 @@ export default function ChargeDashboardPage() {
                   type="button"
                   onClick={handleConnect}
                   disabled={loading || !selectedChargeId}
-                  className="w-full rounded-lg bg-btk-blue px-4 py-3 text-sm font-black text-white transition hover:bg-btk-dark disabled:cursor-not-allowed disabled:bg-blue-200"
+                  className="charge-login-submit w-full rounded-lg bg-btk-blue px-4 py-3 text-sm font-black text-white transition hover:bg-btk-dark disabled:cursor-not-allowed disabled:bg-blue-200"
                 >
                   {loading ? 'Chargement...' : 'Se connecter'}
                 </button>
@@ -685,43 +724,68 @@ export default function ChargeDashboardPage() {
           </section>
         ) : (
           <>
-            <section className="mb-5 flex flex-col gap-4 rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-btk-blue">Chargé connecté</p>
-                <h1 className="mt-2 text-2xl font-black text-gray-950">{connectedCharge.name}</h1>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold">
-                  <span className={`rounded-full px-3 py-1 ring-1 ${
-                    outlookConnection?.connected
-                      ? 'bg-green-50 text-green-700 ring-green-100'
-                      : 'bg-orange-50 text-orange-700 ring-orange-100'
-                  }`}>
-                    {outlookLoading
-                      ? 'Vérification Outlook...'
-                      : outlookConnection?.connected
-                        ? `Outlook connecté${outlookConnection.email ? ` : ${outlookConnection.email}` : ''}`
-                        : 'Outlook non connecté'}
-                  </span>
-                  {!outlookLoading && outlookConnection?.configured && !outlookConnection.connected && (
-                    <button
-                      type="button"
-                      onClick={connectOutlook}
-                      className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-black text-btk-blue transition hover:bg-blue-100"
-                    >
-                      Connecter Outlook
-                    </button>
-                  )}
-                  {!outlookLoading && outlookConnection && !outlookConnection.configured && (
-                    <span className="text-orange-700">Configuration Microsoft Graph requise.</span>
-                  )}
+            <section className="charge-dashboard-hero">
+              <div className="charge-dashboard-hero-identity">
+                <span className="charge-dashboard-avatar" aria-hidden="true">
+                  {connectedCharge.name.split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join('').toUpperCase()}
+                </span>
+                <div className="charge-dashboard-hero-copy">
+                  <p className="charge-dashboard-eyebrow">Espace chargé · Tableau de bord</p>
+                  <h1>{connectedCharge.name}</h1>
+                  <div className="charge-dashboard-meta">
+                    <span>{connectedCharge.agencyName}</span>
+                    <i aria-hidden="true" />
+                    <span>{connectedCharge.agencyCode}</span>
+                    <i aria-hidden="true" />
+                    <span>Matricule {connectedCharge.code}</span>
+                  </div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleDisconnect}
-                className="inline-flex items-center justify-center rounded-lg border border-red-100 bg-red-50 px-4 py-2 text-sm font-black text-red-700 transition hover:bg-red-100"
-              >
-                Déconnexion
-              </button>
+              <div className="charge-dashboard-hero-actions">
+                <div className={`charge-outlook-status ${outlookConnection?.connected ? 'is-connected' : 'is-disconnected'}`}>
+                  <span className="charge-status-dot" aria-hidden="true" />
+                  <span>
+                    <strong>{outlookLoading ? 'Vérification Outlook...' : outlookConnection?.connected ? 'Outlook connecté' : 'Outlook non connecté'}</strong>
+                    {!outlookLoading && outlookConnection?.connected && outlookConnection.email && <small>{outlookConnection.email}</small>}
+                    {!outlookLoading && outlookConnection && !outlookConnection.configured && <small>Configuration Microsoft Graph requise</small>}
+                  </span>
+                </div>
+                {!outlookLoading && outlookConnection?.configured && !outlookConnection.connected && (
+                  <button
+                    type="button"
+                    onClick={connectOutlook}
+                    className="charge-outlook-connect"
+                  >
+                    Connecter Outlook
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleDisconnect}
+                  className="charge-dashboard-logout"
+                >
+                  Déconnexion
+                </button>
+              </div>
+            </section>
+
+            <section className="charge-dashboard-kpis" aria-label="Résumé de l'activité">
+              <article className="charge-dashboard-kpi">
+                <span className="charge-kpi-icon is-blue" aria-hidden="true">01</span>
+                <div><small>Disponibilité</small><strong>{dayCalendar ? (dayCalendar.available ? 'Disponible' : 'Indisponible') : '—'}</strong><span>{dayCalendar ? formatDayLabel(dayCalendar.date) : 'Sélectionnez une date'}</span></div>
+              </article>
+              <article className="charge-dashboard-kpi">
+                <span className="charge-kpi-icon is-green" aria-hidden="true">02</span>
+                <div><small>Créneaux libres</small><strong>{dayCalendar?.slots.filter(slot => slot.available).length ?? '—'}</strong><span>Pour la date sélectionnée</span></div>
+              </article>
+              <article className="charge-dashboard-kpi">
+                <span className="charge-kpi-icon is-violet" aria-hidden="true">03</span>
+                <div><small>Rendez-vous à venir</small><strong>{appointments.length}</strong><span>Dans votre agenda</span></div>
+              </article>
+              <article className="charge-dashboard-kpi">
+                <span className="charge-kpi-icon is-amber" aria-hidden="true">04</span>
+                <div><small>Votre agence</small><strong>{connectedCharge.agencyCode}</strong><span>{connectedCharge.agencyName}</span></div>
+              </article>
             </section>
 
             {notice && (
@@ -730,14 +794,20 @@ export default function ChargeDashboardPage() {
               </div>
             )}
 
-            <div className="grid gap-5 lg:grid-cols-2">
-              <div className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100 sm:p-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
+            <div className="charge-dashboard-grid grid gap-5 lg:grid-cols-2">
+              <div className="charge-dashboard-panel charge-calendar-panel rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100 sm:p-6">
+                <div className="charge-panel-heading flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="charge-panel-title">
+                    <span className="charge-panel-icon" aria-hidden="true">CAL</span>
+                    <div>
+                      <p>Planning personnel</p>
                     <h2 className="text-xl font-black text-gray-950">Calendrier de disponibilité</h2>
+                      <span>Gérez vos horaires et vos créneaux.</span>
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="charge-date-controls flex flex-col gap-3 sm:flex-row sm:items-end">
                     <label className="block min-w-[220px] text-sm font-black text-gray-700">
+                      <span className="charge-date-label">Date à consulter</span>
                       <input
                         type="date"
                         className="btk-input mt-2 w-full"
@@ -750,7 +820,7 @@ export default function ChargeDashboardPage() {
                       type="button"
                       onClick={() => refreshDayCalendar(selectedAvailabilityDate)}
                       disabled={dayLoading}
-                      className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-black text-btk-blue transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="charge-calendar-refresh rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-black text-btk-blue transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {dayLoading ? 'Actualisation...' : 'Actualiser'}
                     </button>
@@ -767,12 +837,10 @@ export default function ChargeDashboardPage() {
                   </div>
                 ) : (
                   <div className="mt-6 space-y-5">
-                    <section className="rounded-lg border border-blue-100 bg-blue-50 p-5">
+                    <section className={`charge-selected-day rounded-lg border border-blue-100 bg-blue-50 p-5 ${dayCalendar.available ? 'is-available' : 'is-unavailable'}`}>
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                          <p className="text-xs font-black uppercase tracking-[0.18em] text-btk-blue">
-                            Jour sélectionné - {WEEKDAYS[dayCalendar.weekday]}
-                          </p>
+                          <p className="charge-selected-day-label">{WEEKDAYS[dayCalendar.weekday]} · Vue du jour</p>
                           <h3 className="mt-2 text-2xl font-black capitalize text-gray-950">
                             {formatDayLabel(dayCalendar.date)}
                           </h3>
@@ -787,12 +855,12 @@ export default function ChargeDashboardPage() {
                       </div>
                     </section>
 
-                    <section className="rounded-lg border border-blue-100 p-5">
-                      <div className="flex flex-wrap justify-end gap-3">
+                    <section className="charge-schedule-editor rounded-lg border border-blue-100 p-5">
+                      <div className="charge-schedule-actions flex flex-wrap justify-end gap-3">
                         <button
                           type="button"
                           onClick={() => setLeaveModalOpen(true)}
-                          className="rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white transition hover:bg-amber-700"
+                          className="charge-leave-primary rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white transition hover:bg-amber-700"
                         >
                           Planifier un congé
                         </button>
@@ -833,7 +901,7 @@ export default function ChargeDashboardPage() {
                         </div>
                       )}
 
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+                      <div className="charge-block-form flex flex-col gap-4 lg:flex-row lg:items-end">
                         <div className="grid flex-1 gap-3 sm:grid-cols-2">
                           <label className="block text-sm font-black text-gray-700">
                             Indisponible de
@@ -863,7 +931,7 @@ export default function ChargeDashboardPage() {
                         </button>
                       </div>
 
-                      <div className="mt-4 flex flex-wrap gap-2">
+                      <div className="charge-schedule-footer mt-4 flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={() => toggleWholeDayBlock(!wholeDayBlocked)}
@@ -885,8 +953,8 @@ export default function ChargeDashboardPage() {
                         </button>
                       </div>
 
-                      <div className="mt-4 rounded-lg bg-slate-50 p-4 ring-1 ring-slate-100">
-                        <h4 className="text-sm font-black text-gray-950">Indisponibilités du jour</h4>
+                      <div className="charge-blocks-summary mt-4 rounded-lg bg-slate-50 p-4 ring-1 ring-slate-100">
+                        <div className="charge-blocks-heading"><h4>Indisponibilités</h4><span>{wholeDayBlocked ? 'Journée complète' : `${rangeBlocks.length} plage${rangeBlocks.length > 1 ? 's' : ''}`}</span></div>
                         {wholeDayBlocked ? (
                           <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700 ring-1 ring-red-100">
                             Toute la journée est désactivée.
@@ -915,9 +983,12 @@ export default function ChargeDashboardPage() {
                       </div>
                     </section>
 
-                    <section>
-                      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <h3 className="text-lg font-black text-gray-950">Créneaux du jour</h3>
+                    <section className="charge-slots-section">
+                      <div className="charge-slots-heading mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div><h3>Créneaux du jour</h3><span>{dayCalendar.slots.filter(slot => slot.available).length} disponibles sur {dayCalendar.slots.length}</span></div>
+                        <div className="charge-slots-legend" aria-label="Légende des créneaux">
+                          <span><i className="is-free" />Libre</span><span><i className="is-booked" />Réservé</span><span><i className="is-blocked" />Bloqué</span>
+                        </div>
                       </div>
 
                       {dayCalendar.slots.length === 0 ? (
@@ -932,7 +1003,7 @@ export default function ChargeDashboardPage() {
                             return (
                               <div
                                 key={slot.time}
-                                className={`rounded-lg border px-4 py-3 text-sm font-black ${
+                                className={`charge-slot rounded-lg border px-4 py-3 text-sm font-black ${
                                   slot.available
                                     ? 'border-green-100 bg-green-50 text-green-700'
                                     : reserved
@@ -958,16 +1029,20 @@ export default function ChargeDashboardPage() {
                 )}
               </div>
 
-              <div className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100 sm:p-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
+              <div className="charge-dashboard-panel charge-appointments-panel rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100 sm:p-6">
+                <div className="charge-panel-heading charge-appointments-heading flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="charge-panel-title">
+                    <span className="charge-panel-icon is-violet" aria-hidden="true">RDV</span>
+                    <div>
+                      <p>Votre agenda</p>
                     <h2 className="text-xl font-black text-gray-950">Rendez-vous à venir</h2>
-                    <p className="mt-2 text-sm text-gray-500">
+                    <span>
                       Suivez les prochaines réservations et annulez si nécessaire.
-                    </p>
+                    </span>
+                    </div>
                   </div>
-                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-btk-blue ring-1 ring-blue-100">
-                    {appointments.length} à venir
+                  <span className="charge-appointment-count">
+                    <strong>{appointments.length}</strong> à venir
                   </span>
                 </div>
 
@@ -976,44 +1051,36 @@ export default function ChargeDashboardPage() {
                     Chargement des rendez-vous...
                   </div>
                 ) : appointments.length === 0 ? (
-                  <div className="mt-6 rounded-lg bg-gray-50 p-6 text-center text-sm font-semibold text-gray-400">
-                    Aucun rendez-vous prévu.
+                  <div className="charge-appointments-empty mt-6 rounded-lg bg-gray-50 p-6 text-center">
+                    <span aria-hidden="true">✓</span>
+                    <strong>Aucun rendez-vous prévu</strong>
+                    <p>Votre agenda est à jour pour le moment.</p>
                   </div>
                 ) : (
-                  <div className="mt-6 overflow-x-auto rounded-lg border border-blue-100">
-                    <table className="min-w-full border-collapse text-left text-sm">
-                      <thead className="bg-blue-50 text-xs uppercase tracking-[0.16em] text-blue-700">
-                        <tr>
-                          <th className="px-4 py-3">Code</th>
-                          <th className="px-4 py-3">Date</th>
-                          <th className="px-4 py-3">Heure</th>
-                          <th className="px-4 py-3">Client</th>
-                          <th className="px-4 py-3">Sujet</th>
-                          <th className="px-4 py-3">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {appointments.map(appointment => (
-                          <tr key={appointment.id} className="border-t border-blue-50 hover:bg-blue-50/50">
-                            <td className="px-4 py-3 font-black text-btk-blue">{appointment.reference}</td>
-                            <td className="px-4 py-3 font-black text-gray-900">{formatAppointmentDate(appointment.date)}</td>
-                            <td className="px-4 py-3 text-gray-700">{appointment.time}</td>
-                            <td className="px-4 py-3 text-gray-700">{appointment.customerName}</td>
-                            <td className="px-4 py-3 text-gray-700">{appointment.subject || '-'}</td>
-                            <td className="px-4 py-3">
-                              <button
-                                type="button"
-                                onClick={() => cancelAppointment(appointment.id)}
-                                disabled={cancellingAppointmentId === appointment.id}
-                                className="rounded-lg bg-red-50 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {cancellingAppointmentId === appointment.id ? 'Annulation...' : 'Annuler'}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="charge-appointments-list mt-6">
+                    {appointments.map(appointment => (
+                      <article key={appointment.id} className="charge-appointment-card">
+                        <div className="charge-appointment-date">
+                          <strong>{appointment.time}</strong>
+                          <span>{formatAppointmentDate(appointment.date)}</span>
+                        </div>
+                        <div className="charge-appointment-details">
+                          <div className="charge-appointment-title">
+                            <strong>{appointment.customerName}</strong>
+                            <span>{appointment.reference}</span>
+                          </div>
+                          <p>{appointment.subject || 'Rendez-vous'}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => cancelAppointment(appointment.id)}
+                          disabled={cancellingAppointmentId === appointment.id}
+                          className="charge-appointment-cancel"
+                        >
+                          {cancellingAppointmentId === appointment.id ? 'Annulation...' : 'Annuler'}
+                        </button>
+                      </article>
+                    ))}
                   </div>
                 )}
               </div>

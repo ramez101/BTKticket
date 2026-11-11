@@ -760,34 +760,34 @@ export default function DashboardPage() {
   const addGuichetAgency = agencies.find(a => a.id === showAddGuichet)
   const isAgencyDetailsOpen = tab === 'agencies' && Boolean(selectedAgency)
   const tabTitle = isAgencyDetailsOpen && selectedAgency
-    ? 'Caracteristiques'
+    ? 'Caractéristiques'
     : tab === 'agencies'
     ? 'Agences et guichets'
     : tab === 'charges'
-      ? 'Config charge'
+        ? 'Charges'
     : tab === 'holidays'
-      ? 'Jours feries'
+        ? 'Jours fériés'
       : tab === 'service'
-        ? 'SERVICE'
+          ? 'Service standard'
       : tab === 'single-session'
-        ? 'Seance unique'
+          ? 'Séance unique'
         : tab === 'ramadan'
           ? 'Ramadan'
       : 'Statistiques'
   const tabDescription = isAgencyDetailsOpen && selectedAgency
     ? `${selectedAgency.name} - ${selectedAgency.code} - ${selectedAgency.city}`
     : tab === 'agencies'
-    ? 'Gestion des agences, guichets et disponibilites.'
+    ? 'Gestion des agences, guichets et disponibilités.'
     : tab === 'charges'
-      ? 'Gestion des charges, affectation agence et calendriers RDV.'
+        ? 'Gestion des chargés, affectations et calendriers de rendez-vous.'
     : tab === 'holidays'
       ? 'Dates de fermeture exceptionnelle du service.'
       : tab === 'service'
-        ? 'Horaire par defaut du service: 08:00 - 16:30.'
+          ? 'Horaires habituels appliqués aux agences.'
       : tab === 'single-session'
-        ? 'Horaire special applique pendant les mois choisis.'
+          ? 'Configurez les horaires spéciaux et leur période d’application.'
         : tab === 'ramadan'
-          ? 'Mois Ramadan et horaire applique pendant ce mois.'
+            ? 'Configurez la période du Ramadan et ses horaires de service.'
       : 'Vue globale de la charge et des files.'
   const dashboardNavigation: { key: DashboardTab; code: string; label: string; detail: string }[] = [
     { key: 'agencies', code: 'AG', label: 'Agences', detail: `${stats.activeAgencies} agences actives` },
@@ -843,18 +843,19 @@ export default function DashboardPage() {
             <span className="dashboard-sidebar-brand-mark"><img src="/BTK.png" alt="BTK" /></span>
             <span><strong>BTK Easy</strong><small>Gestion des agences BTK</small></span>
           </div>
-          <label className="dashboard-topbar-search">
-            <span aria-hidden="true">⌕</span>
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Rechercher une agence, un guichet, un code..."
-              aria-label="Rechercher dans le dashboard"
-            />
-          </label>
+          <div className="dashboard-topbar-context">
+            <span className="dashboard-topbar-context-mark" aria-hidden="true">
+              <img src="/BTK.png" alt="" />
+            </span>
+            <span className="dashboard-topbar-context-copy">
+              <small>Espace de gestion</small>
+              <strong>Administration BTK</strong>
+            </span>
+          </div>
           <div className="dashboard-topbar-actions">
             <button
               type="button"
+              aria-label="Actualiser les données"
               onClick={() => {
                 fetchAgencies()
                 fetchCharges()
@@ -865,12 +866,19 @@ export default function DashboardPage() {
             >
               <span aria-hidden="true">↻</span> Actualiser
             </button>
-            <span className="dashboard-topbar-user-icon" aria-hidden="true">●</span>
-            <span className="dashboard-topbar-user dashboard-topbar-profile">
-              <strong>Administrateur</strong>
-              <small><i aria-hidden="true" /> En ligne</small>
-            </span>
-            <button type="button" className="dashboard-topbar-logout" onClick={() => setAuthed(false)}>
+            <div className="dashboard-topbar-account">
+              <span className="dashboard-topbar-user-icon" aria-hidden="true">A</span>
+              <span className="dashboard-topbar-user dashboard-topbar-profile">
+                <strong>Administrateur</strong>
+                <small><i aria-hidden="true" /> En ligne</small>
+              </span>
+            </div>
+            <button
+              type="button"
+              className="dashboard-topbar-logout"
+              onClick={() => setAuthed(false)}
+              aria-label="Se déconnecter"
+            >
               Déconnexion
             </button>
           </div>
@@ -886,99 +894,45 @@ export default function DashboardPage() {
             aria-label="Fermer le menu"
           />
           <aside className="dashboard-mobile-menu fixed inset-y-0 left-0 z-50 flex h-dvh w-[310px] max-w-[86vw] flex-col bg-white shadow-2xl ring-1 ring-blue-100 lg:hidden">
-            <div className="dashboard-sidebar-top">
+            <div className="dashboard-mobile-menu-header">
+              <span className="dashboard-sidebar-brand-mark"><img src="/BTK.png" alt="BTK" /></span>
+              <span className="dashboard-mobile-menu-brand">
+                <strong>BTK Easy</strong>
+                <small>Administration</small>
+              </span>
               <button
                 type="button"
                 onClick={() => setMenuOpen(false)}
                 className="dashboard-sidebar-toggle"
                 aria-label="Fermer le menu"
               >
-                ×
+                <span aria-hidden="true">×</span>
               </button>
             </div>
 
             <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
               <div className="grid gap-2">
-              <DashboardMenuButton
-                active={tab === 'agencies'}
-                code="AG"
-                label="Agences"
-                detail="Agences et guichets"
-                onClick={() => {
-                  setTab('agencies')
-                  setSelectedAgencyId(null)
-                  setMenuOpen(false)
-                }}
-              />
-              <DashboardMenuButton
-                active={tab === 'charges'}
-                code="CH"
-                label="Config charge"
-                detail={`${charges.length} charge(s)`}
-                onClick={() => {
-                  setTab('charges')
-                  setSelectedAgencyId(null)
-                  setMenuOpen(false)
-                }}
-              />
-              <DashboardMenuButton
-                active={tab === 'holidays'}
-                code="JF"
-                label="Jours feries"
-                detail={`${holidays.length} date(s)`}
-                onClick={() => {
-                  setTab('holidays')
-                  setMenuOpen(false)
-                }}
-              />
-              <DashboardMenuButton
-                active={tab === 'service'}
-                code="SV"
-                label="SERVICE"
-                detail={workSchedule.activeMode === 'service' ? `Actif - ${displayTimeRange(SERVICE_START_TIME, SERVICE_END_TIME)}` : displayTimeRange(SERVICE_START_TIME, SERVICE_END_TIME)}
-                onClick={() => {
-                  setTab('service')
-                  setSelectedAgencyId(null)
-                  setMenuOpen(false)
-                }}
-              />
-              <DashboardMenuButton
-                active={tab === 'single-session'}
-                code="SU"
-                label="Seance unique"
-                detail={workSchedule.activeMode === 'single-session' ? displayMonthRange(workSchedule.singleSessionStartMonth, workSchedule.singleSessionEndMonth) : 'Non active'}
-                onClick={() => {
-                  setTab('single-session')
-                  setSelectedAgencyId(null)
-                  setMenuOpen(false)
-                }}
-              />
-              <DashboardMenuButton
-                active={tab === 'ramadan'}
-                code="RA"
-                label="Ramadan"
-                detail={workSchedule.activeMode === 'ramadan' ? displayMonth(workSchedule.ramadanMonth) : 'Non actif'}
-                onClick={() => {
-                  setTab('ramadan')
-                  setSelectedAgencyId(null)
-                  setMenuOpen(false)
-                }}
-              />
-              <DashboardMenuButton
-                active={tab === 'stats'}
-                code="ST"
-                label="Statistiques"
-                detail="Charge et attente"
-                onClick={() => {
-                  setTab('stats')
-                  setMenuOpen(false)
-                }}
-              />
+                <p className="dashboard-nav-section-label">Administration</p>
+                {dashboardNavigation.map(item => (
+                  <DashboardMenuButton
+                    key={item.key}
+                    active={tab === item.key}
+                    code={item.code}
+                    label={item.label}
+                    detail={item.detail}
+                    onClick={() => {
+                      setTab(item.key)
+                      setSelectedAgencyId(null)
+                      setMenuOpen(false)
+                    }}
+                  />
+                ))}
+                <p className="dashboard-nav-section-label">Espace conseiller</p>
               <DashboardMenuButton
                 active={false}
                 code="DC"
-                label="Dashboard chargé"
-                detail="Connexion chargé"
+                label="Espace conseiller"
+                detail="Accès au tableau de bord conseiller"
                 onClick={() => {
                   router.push('/charge-dashboard')
                   setMenuOpen(false)
@@ -1036,7 +990,7 @@ export default function DashboardPage() {
           </div>
 
           <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto" aria-label="Navigation dashboard">
-            <p className="dashboard-nav-section-label">Gestion</p>
+          <p className="dashboard-nav-section-label">Administration</p>
             {dashboardNavigation.filter(item => item.key !== 'stats').map(item => (
               <DashboardMenuButton
                 key={item.key}
@@ -1046,9 +1000,7 @@ export default function DashboardPage() {
                 detail={item.detail}
                 onClick={() => {
                   setTab(item.key)
-                  if (item.key === 'agencies' || item.key === 'charges' || item.key === 'service' || item.key === 'single-session' || item.key === 'ramadan') {
-                    setSelectedAgencyId(null)
-                  }
+                  setSelectedAgencyId(null)
                 }}
               />
             ))}
@@ -1066,7 +1018,7 @@ export default function DashboardPage() {
             <DashboardMenuButton
               active={false}
               code="DC"
-              label="Dashboard chargé"
+              label="Espace conseiller"
               detail="Connexion conseiller"
               onClick={() => router.push('/charge-dashboard')}
             />
@@ -1091,28 +1043,42 @@ export default function DashboardPage() {
 
       <section className="dashboard-content">
         <div className="mx-auto min-w-0 max-w-none">
-            <div className="dashboard-page-intro">
+            {tab === 'agencies' && !selectedAgency && (
+              <div className="dashboard-page-intro">
               <div>
-                <div className="dashboard-breadcrumb"><span aria-hidden="true">⌂</span> Accueil</div>
-                <h1>{tab === 'agencies' ? 'Tableau de bord' : tabTitle}</h1>
-                <p>{tab === 'agencies' ? 'Vue d’ensemble de la gestion des agences BTK' : tabDescription}</p>
+                <div className="dashboard-breadcrumb"><span aria-hidden="true">⌂</span> Espace d’administration</div>
+                <h1>Vue d’ensemble</h1>
+                <p>Pilotez vos agences, vos équipes et le service en un seul endroit.</p>
               </div>
               <div className="dashboard-date">
                 <strong>Aujourd’hui</strong>
-                <span>Suivi en temps réel</span>
+                <span>Indicateurs mis à jour en temps réel</span>
               </div>
-            </div>
-            <div className="dashboard-kpi-grid">
-              <StatCard label="Agences" value={stats.totalAgencies} detail={`${stats.activeAgencies} actives`} tone="blue" />
-              <StatCard label="Inactives" value={stats.inactiveAgencies} detail="agences fermees" tone="gray" />
+              </div>
+            )}
+            {tab === 'agencies' && !selectedAgency && <div className="dashboard-kpi-grid">
+              <StatCard
+                label="Agences"
+                value={stats.totalAgencies}
+                detail={`${stats.activeAgencies} actives · ${stats.inactiveAgencies} inactives`}
+                tone="blue"
+              />
               <StatCard label="Charges" value={stats.totalCharges} detail={`${stats.activeCharges} actifs`} tone="indigo" />
-              <StatCard label="Guichets" value={stats.totalGuichets} detail="total" tone="indigo" />
-              <StatCard label="Ouverts" value={stats.openGuichets} detail={`${stats.closedGuichets} fermes`} tone="green" />
-              <StatCard label="En attente" value={stats.totalWaiting} detail="tickets live" tone="orange" />
-              <StatCard label="Attente" value={`~${stats.estimatedWait}m`} detail="estimation totale" tone="red" />
-            </div>
+              <StatCard
+                label="Guichets ouverts"
+                value={stats.openGuichets}
+                detail={`${stats.closedGuichets} fermés · ${stats.totalGuichets} au total`}
+                tone="green"
+              />
+              <StatCard
+                label="Tickets en attente"
+                value={stats.totalWaiting}
+                detail={`Attente estimée ~${stats.estimatedWait} min`}
+                tone="orange"
+              />
+            </div>}
 
-            <div className="dashboard-toolbar mt-5 p-5 sm:p-6">
+            {!isAgencyDetailsOpen && <div className="dashboard-toolbar mt-5 p-5 sm:p-6">
               <div className="dashboard-toolbar-heading">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-btk-blue">Administration</p>
@@ -1142,7 +1108,12 @@ export default function DashboardPage() {
                   {notice}
                 </div>
               )}
-            </div>
+            </div>}
+            {isAgencyDetailsOpen && notice && (
+              <div className="dashboard-notice dashboard-detail-notice mt-5 px-4 py-3 text-sm font-semibold">
+                {notice}
+              </div>
+            )}
 
             {loading ? (
               <div className="mt-6 rounded-2xl border border-[#e2eaf3] bg-white p-10 text-center text-sm font-semibold text-gray-400 shadow-sm">
@@ -1181,6 +1152,7 @@ export default function DashboardPage() {
               <ChargesView
                 charges={filteredCharges}
                 agencies={agencies}
+                searchValue={search}
                 onAdd={() => setShowAddCharge(true)}
                 onEdit={charge => setEditCharge({ ...charge })}
                 onCalendar={openChargeCalendar}
@@ -1217,7 +1189,7 @@ export default function DashboardPage() {
                 onSave={() => saveWorkSchedule('Horaire Ramadan enregistre.')}
               />
             ) : (
-              <StatsView agencies={filteredAgencies} busiest={stats.busiest} />
+              <StatsView agencies={filteredAgencies} searchValue={search} />
             )}
           </div>
       </section>
@@ -1507,54 +1479,57 @@ function AgencyDetails({
     : `${stats.averagePassageMinutes} min / ticket par defaut`
 
   return (
-    <section className="mt-5 rounded-lg bg-white shadow-sm ring-1 ring-blue-100">
-      <div className="border-b border-blue-50 p-5">
+    <section className="agency-detail mt-5 rounded-lg bg-white shadow-sm ring-1 ring-blue-100">
+      <div className="agency-detail-header">
         <button
           type="button"
           onClick={onBack}
-          className="mb-4 rounded-lg border border-blue-100 bg-white px-4 py-2 text-sm font-black text-btk-blue transition hover:bg-blue-50"
+          className="agency-detail-back rounded-lg border border-blue-100 bg-white px-4 py-2 text-sm font-black text-btk-blue transition hover:bg-blue-50"
         >
-          Retour aux agences
+          <span aria-hidden="true">←</span> Retour aux agences
         </button>
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-btk-blue text-lg font-black text-white">
+        <div className="agency-detail-identity">
+          <div className="agency-detail-code">
+            <span className="sr-only">Code agence</span>
+            <span aria-hidden="true">
               {agency.code}
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-black uppercase text-btk-blue">Fiche agence</div>
-              <h2 className="mt-1 truncate text-3xl font-black text-gray-950">{agency.name}</h2>
-              <p className="mt-1 text-sm font-semibold text-gray-500">{agency.code} - {agency.city}</p>
-            </div>
+            </span>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-3 py-1 text-xs font-black ring-1 ${agency.isActive ? 'bg-green-50 text-green-700 ring-green-200' : 'bg-gray-50 text-gray-500 ring-gray-200'}`}>
+          <div className="agency-detail-title">
+            <div className="agency-detail-eyebrow">Fiche agence</div>
+            <h2>{agency.name}</h2>
+            <p>{agency.code} <span aria-hidden="true">·</span> {agency.city}</p>
+          </div>
+          <div className="agency-detail-actions">
+            <span className={`agency-detail-status rounded-full px-3 py-1 text-xs font-black ring-1 ${agency.isActive ? 'bg-green-50 text-green-700 ring-green-200' : 'bg-gray-50 text-gray-500 ring-gray-200'}`}>
               {agency.isActive ? 'Active' : 'Inactive'}
             </span>
             <ActionButton onClick={onEditAgency}>Modifier</ActionButton>
             <ActionButton onClick={onToggleAgency} tone={agency.isActive ? 'orange' : 'green'}>
-              {agency.isActive ? 'Desactiver' : 'Activer'}
+              {agency.isActive ? 'Désactiver' : 'Activer'}
             </ActionButton>
             <ActionButton onClick={onDeleteAgency} tone="red">Supprimer</ActionButton>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="space-y-5">
-          <section className="rounded-lg border border-blue-50 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-black uppercase text-gray-500">Caracteristiques</h3>
+      <div className="agency-detail-body">
+        <div className="agency-detail-main">
+          <section className="agency-detail-metrics rounded-lg border border-blue-50 p-4">
+            <div className="agency-detail-section-heading">
+              <div>
+                <h3>Suivi opérationnel</h3>
+                <p>Activité et performance du jour</p>
+              </div>
               <span className={`rounded-full px-2.5 py-1 text-xs font-black ring-1 ${load.badge}`}>
                 {load.label}
               </span>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-3">
+            <div className="agency-detail-operational-grid">
               <OperationalMetric
-                label="Etat operationnel"
+                label="État opérationnel"
                 value={health.label}
                 detail={health.detail}
                 tone={health.tone}
@@ -1576,68 +1551,80 @@ function AgencyDetails({
               />
             </div>
 
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="agency-detail-totals-grid">
               <CharacteristicMetric label="En attente" value={stats.waiting} detail={`${waitingPerOpen} par guichet ouvert`} tone="blue" />
-              <CharacteristicMetric label="Temps estime" value={`~${stats.estimatedWait}m`} detail={passageDetail} tone="orange" />
-              <CharacteristicMetric label="Reste a traiter" value={remainingTickets} detail="attente + appeles" tone="indigo" />
+              <CharacteristicMetric label="Temps estimé" value={`~${stats.estimatedWait} min`} detail={passageDetail} tone="orange" />
+              <CharacteristicMetric label="Reste à traiter" value={remainingTickets} detail="En attente et appelés" tone="indigo" />
               <CharacteristicMetric label="Servis" value={stats.served} detail={`${servedPercent}% du jour`} tone="green" />
               <CharacteristicMetric label="Absents" value={stats.absent} detail={`${absentPercent}% du jour`} tone="red" />
-              <CharacteristicMetric label="Total jour" value={stats.total} detail="tickets crees aujourd'hui" tone="gray" />
+              <CharacteristicMetric label="Total du jour" value={stats.total} detail="Tickets créés aujourd’hui" tone="gray" />
             </div>
 
-            <div className="mt-4 rounded-lg bg-gray-50 p-4 ring-1 ring-gray-100">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-sm font-black text-gray-800">Charge de la file</span>
-                <span className="text-sm font-black text-btk-blue tabular-nums">{stats.waiting} ticket(s) en attente</span>
+            <div className="agency-detail-queue rounded-lg bg-gray-50 p-4 ring-1 ring-gray-100">
+              <div className="agency-detail-queue-heading">
+                <span>Charge de la file</span>
+                <strong>{stats.waiting} ticket(s) en attente</strong>
               </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+              <div
+                className="agency-detail-queue-track mt-3 h-2 overflow-hidden rounded-full bg-white"
+                role="meter"
+                aria-label="Niveau de charge de la file"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={waitingPercent}
+              >
                 <div className={`h-full rounded-full ${load.bar}`} style={{ width: `${waitingPercent}%` }} />
               </div>
-              <div className="mt-3 grid gap-2 text-sm font-semibold text-gray-500 sm:grid-cols-3">
-                <span>Conseil: {getAgencyAdvice(agency)}</span>
-                <span className="sm:text-center">Charge/guichet: {waitingPerOpen}</span>
-                <span className="sm:text-right">Absence: {absentPercent}%</span>
+              <div className="agency-detail-queue-meta">
+                <span>{getAgencyAdvice(agency)}</span>
+                <span>Charge par guichet <strong>{waitingPerOpen}</strong></span>
+                <span>Absences <strong>{absentPercent}%</strong></span>
               </div>
             </div>
           </section>
 
-          <section>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-black uppercase text-gray-500">Guichets</h3>
+          <section className="agency-detail-guichets">
+            <div className="agency-detail-section-heading">
+              <div>
+                <h3>Guichets</h3>
+                <p>{openGuichets} ouvert(s) sur {guichets.length}</p>
+              </div>
               <button
                 type="button"
                 onClick={event => {
                   event.stopPropagation()
                   onAddGuichet()
                 }}
-                className="rounded-lg bg-btk-blue px-3 py-2 text-xs font-bold text-white transition hover:bg-btk-dark"
+                className="agency-detail-add-guichet rounded-lg bg-btk-blue px-3 py-2 text-xs font-bold text-white transition hover:bg-btk-dark"
               >
-                Ajouter guichet
+                + Ajouter un guichet
               </button>
             </div>
 
             {guichets.length === 0 ? (
-              <div className="rounded-lg bg-gray-50 p-5 text-center text-sm font-medium text-gray-400">
-                Aucun guichet
+              <div className="agency-detail-empty rounded-lg bg-gray-50 p-5 text-center text-sm font-medium text-gray-400">
+                Aucun guichet dans cette agence.
               </div>
             ) : (
-              <div className="divide-y divide-blue-50 rounded-lg border border-blue-50">
+              <div className="agency-detail-guichet-list divide-y divide-blue-50 rounded-lg border border-blue-50">
                 {guichets.map(guichet => (
-                  <div key={guichet.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-2.5 w-2.5 rounded-full ${guichet.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
-                        <span className="truncate font-bold text-gray-800">{guichet.label}</span>
-                        <span className="rounded-full bg-gray-50 px-2 py-0.5 text-xs font-bold text-gray-500 ring-1 ring-gray-100">
-                          N {guichet.number}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-xs font-medium text-gray-400">
-                        {guichet.isActive ? 'Ouvert sur les ecrans' : 'Ferme sur les ecrans'}
+                  <div key={guichet.id} className="agency-detail-guichet-row">
+                    <div className="agency-detail-guichet-info">
+                      <span className={`agency-detail-guichet-indicator ${guichet.isActive ? 'is-open' : ''}`} aria-hidden="true" />
+                      <div className="min-w-0">
+                        <div className="agency-detail-guichet-name">
+                          <span className="truncate">{guichet.label}</span>
+                          <span className="agency-detail-guichet-number">
+                            N° {guichet.number}
+                          </span>
+                        </div>
+                        <div className={`agency-detail-guichet-state ${guichet.isActive ? 'is-open' : ''}`}>
+                          {guichet.isActive ? 'Ouvert' : 'Fermé'} sur les écrans
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="agency-detail-guichet-actions">
                       <ActionButton onClick={() => onEditGuichet(guichet)}>Modifier</ActionButton>
                       <ActionButton onClick={() => onToggleGuichet(guichet)} tone={guichet.isActive ? 'orange' : 'green'}>
                         {guichet.isActive ? 'Fermer' : 'Ouvrir'}
@@ -1649,42 +1636,42 @@ function AgencyDetails({
               </div>
             )}
           </section>
-                </div>
+        </div>
 
-        <aside className="space-y-5">
-          <section className="rounded-lg bg-blue-50 p-4 ring-1 ring-blue-100">
-            <div className="flex items-center justify-between gap-3">
+        <aside className="agency-detail-aside">
+          <section className="agency-detail-capacity rounded-lg bg-blue-50 p-4 ring-1 ring-blue-100">
+            <div className="agency-detail-capacity-heading">
               <span className={`rounded-full px-2.5 py-1 text-xs font-black ring-1 ${capacity.className}`}>
                 {capacity.label}
               </span>
-              <span className="text-xs font-black text-btk-blue">{stats.total} ticket(s)</span>
+              <span>{stats.total} ticket(s) aujourd’hui</span>
             </div>
-            <p className="mt-2 text-sm font-medium text-gray-600">{capacity.detail}</p>
-            <div className="mt-4 grid grid-cols-3 gap-2">
+            <p>{capacity.detail}</p>
+            <div className="agency-detail-capacity-metrics">
               <MiniMetric label="Ouverts" value={openGuichets} tone="green" />
               <MiniMetric label="Fermes" value={closedGuichets} tone="orange" />
               <MiniMetric label="Total" value={guichets.length} tone="blue" />
             </div>
           </section>
 
-          <section>
-            <h3 className="mb-3 text-sm font-black uppercase text-gray-500">Synthese rapide</h3>
-            <div className="divide-y divide-blue-50 rounded-lg border border-blue-50">
-              <CharacteristicRow label="Etat global" value={health.label} />
+          <section className="agency-detail-aside-section">
+            <h3>Synthèse rapide</h3>
+            <div className="agency-detail-info-list divide-y divide-blue-50 rounded-lg border border-blue-50">
+              <CharacteristicRow label="État global" value={health.label} />
               <CharacteristicRow label="Taux service" value={`${servedPercent}%`} />
               <CharacteristicRow label="Ouverture" value={`${openPercent}%`} />
-              <CharacteristicRow label="Charge/guichet" value={waitingPerOpen} />
+              <CharacteristicRow label="Charge par guichet" value={waitingPerOpen} />
               <CharacteristicRow label="Reste" value={remainingTickets} />
             </div>
           </section>
 
-          <section>
-            <h3 className="mb-3 text-sm font-black uppercase text-gray-500">Infos agence</h3>
-            <div className="divide-y divide-blue-50 rounded-lg border border-blue-50">
+          <section className="agency-detail-aside-section">
+            <h3>Informations de l’agence</h3>
+            <div className="agency-detail-info-list divide-y divide-blue-50 rounded-lg border border-blue-50">
               <CharacteristicRow label="Code agence" value={agency.code} />
               <CharacteristicRow label="Ville" value={agency.city} />
-              <CharacteristicRow label="Cree le" value={formatDisplayDate(agency.createdAt)} />
-              <CharacteristicRow label="Statut service" value={agency.isActive ? 'Disponible' : 'Ferme'} />
+              <CharacteristicRow label="Créée le" value={formatDisplayDate(agency.createdAt)} />
+              <CharacteristicRow label="Statut service" value={agency.isActive ? 'Disponible' : 'Fermé'} />
             </div>
           </section>
         </aside>
@@ -1784,6 +1771,7 @@ function CharacteristicRow({ label, value }: { label: string; value: ReactNode }
 function ChargesView({
   charges,
   agencies,
+  searchValue,
   onAdd,
   onEdit,
   onCalendar,
@@ -1792,96 +1780,166 @@ function ChargesView({
 }: {
   charges: Charge[]
   agencies: Agency[]
+  searchValue: string
   onAdd: () => void
   onEdit: (charge: Charge) => void
   onCalendar: (charge: Charge) => void
   onToggle: (charge: Charge) => void
   onDelete: (charge: Charge) => void
 }) {
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const activeCharges = charges.filter(charge => charge.isActive).length
   const agenciesWithCharges = new Set(charges.map(charge => charge.agencyId)).size
+  const totalPages = Math.max(1, Math.ceil(charges.length / pageSize))
+  const firstItem = charges.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  const lastItem = Math.min(currentPage * pageSize, charges.length)
+  const visibleCharges = charges.slice(firstItem - 1, lastItem)
+  const firstPageNumber = Math.max(1, Math.min(currentPage - 2, totalPages - 4))
+  const pageNumbers = Array.from(
+    { length: Math.min(5, totalPages) },
+    (_, index) => firstPageNumber + index,
+  )
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchValue])
+
+  useEffect(() => {
+    setCurrentPage(page => Math.min(page, totalPages))
+  }, [totalPages])
 
   return (
-    <div className="charges-view mt-5 grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <aside className="space-y-4">
-        <section className="charges-intro rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
-          <p className="text-sm font-black uppercase text-btk-blue">Configuration</p>
-          <h2 className="mt-1 text-xl font-black text-gray-950">Chargés clients</h2>
-          <p className="mt-2 text-sm leading-6 text-gray-500">
-            Ajoutez, modifiez, supprimez ou affectez un chargé à une autre agence.
-          </p>
-          <button
-            type="button"
-            onClick={onAdd}
-            className="mt-5 w-full rounded-lg bg-btk-blue px-5 py-3 font-black text-white shadow-sm transition hover:bg-btk-dark"
-          >
-            Ajouter un chargé
-          </button>
-        </section>
-
-        <section className="charges-summary rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
-          <h3 className="text-sm font-black uppercase text-gray-500">Vue d’ensemble</h3>
-          <div className="charges-summary-grid mt-4 grid gap-2">
-            <MiniMetric label="Charges" value={charges.length} tone="blue" />
-            <MiniMetric label="Actifs" value={activeCharges} tone="green" />
-            <MiniMetric label="Agences" value={`${agenciesWithCharges}/${agencies.length}`} tone="orange" />
-          </div>
-        </section>
-      </aside>
+    <div className="charges-view mt-5">
+      <div className="charges-overview">
+        <div className="charges-overview-card charges-overview-card--blue">
+          <span>Total des chargés</span>
+          <strong>{charges.length}</strong>
+          <small>Résultats affichés</small>
+        </div>
+        <div className="charges-overview-card charges-overview-card--green">
+          <span>Chargés actifs</span>
+          <strong>{activeCharges}</strong>
+          <small>Comptes opérationnels</small>
+        </div>
+        <div className="charges-overview-card charges-overview-card--orange">
+          <span>Agences couvertes</span>
+          <strong>{agenciesWithCharges}<small> / {agencies.length}</small></strong>
+          <small>Avec au moins un chargé</small>
+        </div>
+      </div>
 
       <section className="charges-list-panel rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
-        <div className="charges-list-header mb-4 flex items-center justify-between gap-4">
+        <div className="charges-list-header">
           <div>
             <h2 className="text-xl font-black text-gray-950">Liste des chargés</h2>
-            <p className="mt-1 text-sm text-gray-500">Chaque chargé est rattaché automatiquement à son agence.</p>
+            <p className="mt-1 text-sm text-gray-500">
+              Gérez les accès, calendriers et affectations de vos chargés.
+            </p>
           </div>
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-btk-blue ring-1 ring-blue-100">
-            {charges.length}
-          </span>
+          <button type="button" onClick={onAdd} className="charges-add-button">
+            <span aria-hidden="true">＋</span> Ajouter un chargé
+          </button>
         </div>
 
         {charges.length === 0 ? (
-          <div className="rounded-lg bg-gray-50 p-10 text-center text-sm font-semibold text-gray-400">
-            Aucun charge trouve.
+          <div className="charges-empty rounded-lg bg-gray-50 p-10 text-center text-sm font-semibold text-gray-400">
+            {searchValue.trim() ? 'Aucun chargé ne correspond à votre recherche.' : 'Aucun chargé enregistré.'}
           </div>
         ) : (
-          <div className="charges-list divide-y divide-blue-50 rounded-lg border border-blue-50">
-            {charges.map(charge => (
-              <div key={charge.id} className="charges-row grid gap-3 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-                <div className="charges-identity min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-btk-blue">{charge.code}</span>
-                    <h3 className="truncate text-lg font-black text-gray-950">{charge.name}</h3>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-black ring-1 ${
-                      charge.isActive ? 'bg-green-50 text-green-700 ring-green-100' : 'bg-gray-50 text-gray-500 ring-gray-100'
-                    }`}>
-                      {charge.isActive ? 'Actif' : 'Inactif'}
-                    </span>
+          <>
+            <div className="charges-list">
+              {visibleCharges.map(charge => (
+                <article key={charge.id} className="charges-row">
+                  <div className="charges-identity">
+                    <div className="charges-identity-heading">
+                      <span className="charges-code">{charge.code}</span>
+                      <h3>{charge.name}</h3>
+                      <span className={`charges-status ${charge.isActive ? 'is-active' : 'is-inactive'}`}>
+                        <span aria-hidden="true" />
+                        {charge.isActive ? 'Actif' : 'Inactif'}
+                      </span>
+                    </div>
+                    <div className="charges-meta">
+                      <span className="charges-agency">{charge.agencyName}</span>
+                      <span>{charge.agencyCode} · {charge.city}</span>
+                      <span>{charge.appointmentCount ?? 0} rendez-vous</span>
+                      <span className={charge.email ? 'charges-email' : 'charges-email charges-email--missing'}>
+                        {charge.email || 'E-mail Outlook manquant'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="charges-meta mt-2 flex flex-wrap gap-2 text-xs font-bold text-gray-500">
-                    <span>{charge.agencyCode} - {charge.agencyName}</span>
-                    <span className="text-gray-300">|</span>
-                    <span>{charge.city}</span>
-                    <span className="text-gray-300">|</span>
-                    <span>{charge.appointmentCount ?? 0} RDV</span>
-                    <span className="text-gray-300">|</span>
-                    <span className={charge.email ? 'text-gray-500' : 'text-red-600'}>
-                      {charge.email || 'Email Outlook manquant'}
-                    </span>
+                  <div className="charges-actions">
+                    <ActionButton onClick={() => onEdit(charge)}>Modifier</ActionButton>
+                    <ActionButton onClick={() => onCalendar(charge)} tone="green">Calendrier</ActionButton>
+                    <ActionButton onClick={() => onToggle(charge)} tone={charge.isActive ? 'orange' : 'green'}>
+                      {charge.isActive ? 'Désactiver' : 'Activer'}
+                    </ActionButton>
+                    <ActionButton onClick={() => onDelete(charge)} tone="red">Supprimer</ActionButton>
                   </div>
-                </div>
+                </article>
+              ))}
+            </div>
 
-                <div className="charges-actions flex flex-wrap gap-2">
-                  <ActionButton onClick={() => onEdit(charge)}>Modifier</ActionButton>
-                  <ActionButton onClick={() => onCalendar(charge)} tone="green">Calendrier</ActionButton>
-                  <ActionButton onClick={() => onToggle(charge)} tone={charge.isActive ? 'orange' : 'green'}>
-                    {charge.isActive ? 'Desactiver' : 'Activer'}
-                  </ActionButton>
-                  <ActionButton onClick={() => onDelete(charge)} tone="red">Supprimer</ActionButton>
-                </div>
+            <div className="charges-pagination">
+              <div className="charges-pagination-summary" aria-live="polite">
+                Affichage <strong>{firstItem}–{lastItem}</strong> sur <strong>{charges.length}</strong> chargés
               </div>
-            ))}
-          </div>
+              <div className="charges-pagination-controls">
+                <label className="charges-page-size">
+                  <span>Par page</span>
+                  <select
+                    value={pageSize}
+                    onChange={event => {
+                      setPageSize(Number(event.target.value))
+                      setCurrentPage(1)
+                    }}
+                    aria-label="Nombre de chargés par page"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </label>
+                <nav className="charges-page-nav" aria-label="Pagination des chargés">
+                  <button
+                    type="button"
+                    className="charges-page-button charges-page-arrow"
+                    onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                    disabled={currentPage === 1}
+                    aria-label="Page précédente"
+                  >
+                    ‹
+                  </button>
+                  {firstPageNumber > 1 && <span className="charges-page-ellipsis" aria-hidden="true">…</span>}
+                  {pageNumbers.map(page => (
+                    <button
+                      key={page}
+                      type="button"
+                      className={`charges-page-button ${page === currentPage ? 'is-current' : ''}`}
+                      onClick={() => setCurrentPage(page)}
+                      aria-label={`Page ${page}`}
+                      aria-current={page === currentPage ? 'page' : undefined}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  {firstPageNumber + pageNumbers.length - 1 < totalPages && (
+                    <span className="charges-page-ellipsis" aria-hidden="true">…</span>
+                  )}
+                  <button
+                    type="button"
+                    className="charges-page-button charges-page-arrow"
+                    onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}
+                    disabled={currentPage === totalPages}
+                    aria-label="Page suivante"
+                  >
+                    ›
+                  </button>
+                </nav>
+              </div>
+            </div>
+          </>
         )}
       </section>
     </div>
@@ -2334,83 +2392,271 @@ function RamadanView({
   )
 }
 
-function StatsView({ agencies, busiest }: { agencies: Agency[]; busiest?: Agency }) {
-  const ranked = [...agencies].sort((a, b) => getAgencyStats(b).waiting - getAgencyStats(a).waiting)
+function StatsView({ agencies, searchValue }: { agencies: Agency[]; searchValue: string }) {
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(8)
+  const totals = agencies.reduce((result, agency) => {
+    const agencyStats = getAgencyStats(agency)
+    const guichets = agency.guichets ?? []
+    result.activeAgencies += Number(agency.isActive)
+    result.waiting += agencyStats.waiting
+    result.served += agencyStats.served
+    result.absent += agencyStats.absent
+    result.tickets += agencyStats.total
+    result.estimatedWait += agencyStats.estimatedWait
+    result.guichets += guichets.length
+    result.openGuichets += guichets.filter(guichet => guichet.isActive).length
+    return result
+  }, {
+    activeAgencies: 0,
+    waiting: 0,
+    served: 0,
+    absent: 0,
+    tickets: 0,
+    estimatedWait: 0,
+    guichets: 0,
+    openGuichets: 0,
+  })
+  const serviceRate = percent(totals.served, totals.tickets)
+  const guichetRate = percent(totals.openGuichets, totals.guichets)
+  const ranked = [...agencies].sort((a, b) => {
+    const waitingDifference = getAgencyStats(b).waiting - getAgencyStats(a).waiting
+    return waitingDifference || a.name.localeCompare(b.name, 'fr')
+  })
+  const busiest = ranked[0]
   const busiestStats = busiest ? getAgencyStats(busiest) : null
+  const maxWaiting = ranked.reduce((maximum, agency) => Math.max(maximum, getAgencyStats(agency).waiting), 0)
+  const totalPages = Math.max(1, Math.ceil(ranked.length / pageSize))
+  const firstItem = ranked.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  const lastItem = Math.min(currentPage * pageSize, ranked.length)
+  const visibleAgencies = ranked.slice(firstItem - 1, lastItem)
+  const firstPageNumber = Math.max(1, Math.min(currentPage - 2, totalPages - 4))
+  const pageNumbers = Array.from({ length: Math.min(5, totalPages) }, (_, index) => firstPageNumber + index)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchValue])
+
+  useEffect(() => {
+    setCurrentPage(page => Math.min(page, totalPages))
+  }, [totalPages])
 
   return (
-    <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_420px]">
-      <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-black text-gray-950">Charge par agence</h2>
-            <p className="mt-1 text-sm text-gray-500">Tickets en attente et estimation.</p>
-          </div>
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-btk-blue ring-1 ring-blue-100">
-            {agencies.length} agences
-          </span>
-        </div>
-
-        <div className="space-y-3">
-          {ranked.map(agency => {
-            const agencyStats = getAgencyStats(agency)
-            const waiting = agencyStats.waiting
-            const load = getLoad(waiting)
-            return (
-              <div key={agency.id} className="rounded-lg border border-blue-50 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate font-bold text-gray-900">{agency.code} - {agency.name}</div>
-                    <div className="mt-1 text-xs text-gray-500">{agency.city}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-black text-btk-blue tabular-nums">{waiting}</div>
-                    <div className="text-xs text-gray-400">~{agencyStats.estimatedWait} min</div>
-                  </div>
-                </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
-                  <div className={`h-full rounded-full ${load.bar}`} style={{ width: `${Math.min(100, waiting * 5)}%` }} />
-                </div>
-              </div>
-            )
-          })}
-        </div>
+    <div className="stats-dashboard">
+      <section className="stats-kpi-grid" aria-label="Indicateurs globaux">
+        <StatCard
+          label="Agences"
+          value={agencies.length}
+          detail={`${totals.activeAgencies} actives · ${agencies.length - totals.activeAgencies} inactives`}
+          tone="blue"
+        />
+        <StatCard
+          label="Tickets aujourd’hui"
+          value={totals.tickets}
+          detail={`${totals.served} servis · ${totals.absent} absents`}
+          tone="indigo"
+        />
+        <StatCard
+          label="En attente"
+          value={totals.waiting}
+          detail={`Attente estimée ~${totals.estimatedWait} min`}
+          tone="orange"
+        />
+        <StatCard
+          label="Taux de service"
+          value={`${serviceRate}%`}
+          detail={`${totals.openGuichets}/${totals.guichets} guichets ouverts`}
+          tone="green"
+        />
       </section>
 
-      <aside className="space-y-4">
-        <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
-          <h2 className="text-lg font-black text-gray-950">Agence la plus chargee</h2>
-          {busiest ? (
-            <div className="mt-4 rounded-lg bg-blue-50 p-4 ring-1 ring-blue-100">
-              <div className="text-sm font-bold text-btk-blue">{busiest.code}</div>
-              <div className="mt-1 text-xl font-black text-gray-950">{busiest.name}</div>
-              <div className="mt-1 text-sm text-gray-500">{busiest.city}</div>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <MiniMetric label="En attente" value={busiestStats?.waiting ?? 0} tone="blue" />
-                <MiniMetric label="Temps" value={`~${busiestStats?.estimatedWait ?? 0}m`} tone="orange" />
-              </div>
+      <div className="stats-content-grid">
+        <section className="stats-panel stats-ranking-panel">
+          <div className="stats-panel-header">
+            <div>
+              <span className="stats-eyebrow">Vue opérationnelle</span>
+              <h2>Charge par agence</h2>
+              <p>Classement selon le nombre de tickets en attente.</p>
+            </div>
+            <span className="stats-count-badge">{ranked.length} agence(s)</span>
+          </div>
+
+          {ranked.length === 0 ? (
+            <div className="stats-empty">
+              {searchValue.trim() ? 'Aucune agence ne correspond à votre recherche.' : 'Aucune agence à afficher.'}
             </div>
           ) : (
-            <div className="mt-4 rounded-lg bg-gray-50 p-5 text-sm text-gray-400">Aucune donnee</div>
+            <>
+              <div className="stats-ranking-list">
+                {visibleAgencies.map((agency, index) => {
+                  const agencyStats = getAgencyStats(agency)
+                  const waiting = agencyStats.waiting
+                  const load = getLoad(waiting)
+                  const guichets = agency.guichets ?? []
+                  const openGuichets = guichets.filter(guichet => guichet.isActive).length
+                  const agencyOpenRate = percent(openGuichets, guichets.length)
+                  const barWidth = maxWaiting > 0 ? Math.max(waiting > 0 ? 4 : 0, (waiting / maxWaiting) * 100) : 0
+
+                  return (
+                    <article key={agency.id} className="stats-ranking-row">
+                      <span className="stats-rank-number">{String(firstItem + index).padStart(2, '0')}</span>
+                      <div className="stats-agency-info">
+                        <div className="stats-agency-title">
+                          <h3>{agency.name}</h3>
+                          <span>{agency.code}</span>
+                          {!agency.isActive && <span className="stats-inactive-badge">Inactive</span>}
+                        </div>
+                        <p>{agency.city}</p>
+                        <div
+                          className="stats-load-track"
+                          role="meter"
+                          aria-label={`Charge de la file de ${agency.name}`}
+                          aria-valuemin={0}
+                          aria-valuemax={Math.max(1, maxWaiting)}
+                          aria-valuenow={waiting}
+                        >
+                          <span className={load.bar} style={{ width: `${barWidth}%` }} />
+                        </div>
+                      </div>
+                      <div className="stats-agency-queue">
+                        <strong>{waiting}</strong>
+                        <span>en attente</span>
+                      </div>
+                      <div className="stats-agency-capacity">
+                        <strong>{openGuichets}/{guichets.length}</strong>
+                        <span>{agencyOpenRate}% ouverts</span>
+                      </div>
+                      <div className="stats-agency-wait">
+                        <strong>~{agencyStats.estimatedWait} min</strong>
+                        <span>estimées</span>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+
+              <div className="stats-pagination">
+                <p className="stats-pagination-summary" aria-live="polite">
+                  Affichage <strong>{firstItem}–{lastItem}</strong> sur <strong>{ranked.length}</strong> agences
+                </p>
+                <div className="stats-pagination-controls">
+                  <label className="stats-page-size">
+                    <span>Par page</span>
+                    <select
+                      value={pageSize}
+                      onChange={event => {
+                        setPageSize(Number(event.target.value))
+                        setCurrentPage(1)
+                      }}
+                      aria-label="Nombre d’agences par page"
+                    >
+                      <option value={8}>8</option>
+                      <option value={16}>16</option>
+                      <option value={32}>32</option>
+                    </select>
+                  </label>
+                  <nav className="stats-page-nav" aria-label="Pagination des statistiques">
+                    <button
+                      type="button"
+                      className="stats-page-button stats-page-arrow"
+                      onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                      disabled={currentPage === 1}
+                      aria-label="Page précédente"
+                    >
+                      ‹
+                    </button>
+                    {firstPageNumber > 1 && <span className="stats-page-ellipsis" aria-hidden="true">…</span>}
+                    {pageNumbers.map(page => (
+                      <button
+                        key={page}
+                        type="button"
+                        className={`stats-page-button ${page === currentPage ? 'is-current' : ''}`}
+                        onClick={() => setCurrentPage(page)}
+                        aria-label={`Page ${page}`}
+                        aria-current={page === currentPage ? 'page' : undefined}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    {firstPageNumber + pageNumbers.length - 1 < totalPages && (
+                      <span className="stats-page-ellipsis" aria-hidden="true">…</span>
+                    )}
+                    <button
+                      type="button"
+                      className="stats-page-button stats-page-arrow"
+                      onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}
+                      disabled={currentPage === totalPages}
+                      aria-label="Page suivante"
+                    >
+                      ›
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </>
           )}
         </section>
 
-        <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-blue-100">
-          <h2 className="text-lg font-black text-gray-950">Etat guichets</h2>
-          <div className="mt-4 space-y-3">
-            {agencies.slice(0, 8).map(agency => {
-              const total = agency.guichets?.length ?? 0
-              const open = agency.guichets?.filter(g => g.isActive).length ?? 0
-              return (
-                <div key={agency.id} className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="truncate text-sm font-bold text-gray-700">{agency.name}</span>
-                  <span className="text-sm font-black text-green-700">{open}/{total}</span>
+        <aside className="stats-aside">
+          <section className="stats-panel stats-highlight-panel">
+            <div className="stats-panel-header">
+              <div>
+                <span className="stats-eyebrow">Point de vigilance</span>
+                <h2>Agence la plus chargée</h2>
+              </div>
+            </div>
+            {busiest ? (
+              <div className="stats-highlight-card">
+                <span className="stats-highlight-code">{busiest.code}</span>
+                <h3>{busiest.name}</h3>
+                <p>{busiest.city}</p>
+                <div className="stats-highlight-metrics">
+                  <div>
+                    <span>En attente</span>
+                    <strong>{busiestStats?.waiting ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>Temps estimé</span>
+                    <strong>~{busiestStats?.estimatedWait ?? 0} min</strong>
+                  </div>
                 </div>
-              )
-            })}
-          </div>
-        </section>
-      </aside>
+              </div>
+            ) : (
+              <div className="stats-empty">Aucune donnée disponible.</div>
+            )}
+          </section>
+
+          <section className="stats-panel stats-network-panel">
+            <div className="stats-panel-header">
+              <div>
+                <span className="stats-eyebrow">Capacité du réseau</span>
+                <h2>Disponibilité des guichets</h2>
+              </div>
+            </div>
+            <div className="stats-network-summary">
+              <strong>{totals.openGuichets}<span> / {totals.guichets}</span></strong>
+              <span>guichets ouverts</span>
+            </div>
+            <div
+              className="stats-network-track"
+              role="meter"
+              aria-label="Disponibilité globale des guichets"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={guichetRate}
+            >
+              <span style={{ width: `${guichetRate}%` }} />
+            </div>
+            <div className="stats-network-legend">
+              <span><i className="is-open" /> Ouverts <strong>{totals.openGuichets}</strong></span>
+              <span><i /> Fermés <strong>{totals.guichets - totals.openGuichets}</strong></span>
+            </div>
+            <p className="stats-network-footnote">
+              {agencies.length} agence(s) dans cette vue · indicateurs actualisés en temps réel
+            </p>
+          </section>
+        </aside>
+      </div>
     </div>
   )
 }
